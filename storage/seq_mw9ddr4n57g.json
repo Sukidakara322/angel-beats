@@ -1,0 +1,241 @@
+{
+  "version": 3,
+  "name": "Sample 1",
+  "bpm": 120,
+  "tracks": [
+    {
+      "id": "trk_mw9d8itt6f5fj",
+      "name": "Drums",
+      "type": "drums",
+      "preset": "hard",
+      "params": {},
+      "volume": 1,
+      "pan": 0,
+      "mute": false,
+      "solo": false,
+      "currentPartId": "prt_mw9d8ittrc03v"
+    },
+    {
+      "id": "trk_mw9d8itttjdnx",
+      "name": "Bass",
+      "type": "synth",
+      "preset": "whistle-lead",
+      "params": {},
+      "volume": 1,
+      "pan": 0,
+      "mute": false,
+      "solo": false,
+      "currentPartId": "prt_mw9d8ittsdvzo"
+    }
+  ],
+  "parts": [
+    {
+      "id": "prt_mw9d8ittrc03v",
+      "trackId": "trk_mw9d8itt6f5fj",
+      "name": "Drums 1",
+      "minLength": 0,
+      "notes": [
+        {
+          "step": 0,
+          "len": 1,
+          "key": "ltom",
+          "vel": 0.8
+        },
+        {
+          "step": 1,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 2,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 4,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 5,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 7,
+          "len": 1,
+          "key": "ltom",
+          "vel": 0.8
+        },
+        {
+          "step": 8,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 10,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 11,
+          "len": 1,
+          "key": "ltom",
+          "vel": 0.8
+        },
+        {
+          "step": 14,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 13,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 15,
+          "len": 1,
+          "key": "ltom",
+          "vel": 0.8
+        },
+        {
+          "step": 14,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 3,
+          "len": 1,
+          "key": "hat",
+          "vel": 0.8
+        },
+        {
+          "step": 8,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 9,
+          "len": 1,
+          "key": "hat",
+          "vel": 0.8
+        },
+        {
+          "step": 14,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        }
+      ]
+    },
+    {
+      "id": "prt_mw9d8ittsdvzo",
+      "trackId": "trk_mw9d8itttjdnx",
+      "name": "Bass 1",
+      "minLength": 32,
+      "notes": [
+        {
+          "step": 1,
+          "len": 1,
+          "key": 76,
+          "vel": 0.8
+        },
+        {
+          "step": 5,
+          "len": 1,
+          "key": 80,
+          "vel": 0.8
+        },
+        {
+          "step": 11,
+          "len": 1,
+          "key": 78,
+          "vel": 0.8
+        },
+        {
+          "step": 15,
+          "len": 1,
+          "key": 75,
+          "vel": 0.8
+        },
+        {
+          "step": 17,
+          "len": 1,
+          "key": 76,
+          "vel": 0.8
+        },
+        {
+          "step": 19,
+          "len": 1,
+          "key": 73,
+          "vel": 0.8
+        },
+        {
+          "step": 21,
+          "len": 1,
+          "key": 71,
+          "vel": 0.8
+        },
+        {
+          "step": 23,
+          "len": 1,
+          "key": 73,
+          "vel": 0.8
+        },
+        {
+          "step": 25,
+          "len": 1,
+          "key": 76,
+          "vel": 0.8
+        },
+        {
+          "step": 27,
+          "len": 1,
+          "key": 80,
+          "vel": 0.8
+        },
+        {
+          "step": 26,
+          "len": 1,
+          "key": 78,
+          "vel": 0.8
+        },
+        {
+          "step": 29,
+          "len": 1,
+          "key": 78,
+          "vel": 0.8
+        },
+        {
+          "step": 31,
+          "len": 1,
+          "key": 76,
+          "vel": 0.8
+        },
+        {
+          "step": 9,
+          "len": 1,
+          "key": 71,
+          "vel": 0.8
+        }
+      ]
+    }
+  ],
+  "timeline": {
+    "clips": [],
+    "loop": null
+  },
+  "id": "seq_mw9ddr4n57g",
+  "savedAt": 1794235317144
+}

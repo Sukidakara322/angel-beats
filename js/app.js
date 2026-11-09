@@ -283,6 +283,10 @@
       // Distorted: an E5 power chord · clean: an open E major chord.
       const keys = rt.instrument.p.dist ? [40, 47, 52] : [40, 47, 52, 56, 59, 64];
       rt.instrument.triggerChord(keys.map((key) => ({ key, dur: 1.4, vel: SoundPad.DEFAULT_VEL })), t);
+    } else if (rt.track.type === "bass-guitar") {
+      // A short riff on the low E: E1 · E1 · G1 · E2.
+      [[28, 0, 0.2], [28, 0.22, 0.2], [31, 0.44, 0.2], [40, 0.66, 0.7]].forEach(([key, at, dur]) =>
+        rt.instrument.trigger(key, t + at, dur));
     } else {
       const base = SoundPad.synthPreset(rt.track.preset).base;
       const root = base < 40 ? base + 12 : base;

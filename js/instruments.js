@@ -57,9 +57,10 @@ SoundPad.Instruments = {
     Object.entries(this.types).forEach(([type, def]) => {
       def.presets.forEach((pr) => {
         if (!groups.has(pr.category)) groups.set(pr.category, []);
-        groups.get(pr.category).push({ type, preset: pr.id, name: pr.name });
+        groups.get(pr.category).push({ type, preset: pr.id, name: pr.name, rank: def.menuRank || 0 });
       });
     });
+    groups.forEach((items) => items.sort((a, b) => a.rank - b.rank));   // stable: keeps preset order
     const order = ["Drums", "Guitar", "Bass", "Lead", "Pad", "Keys", "FX"];
     return [...groups.entries()]
       .sort((a, b) => (order.indexOf(a[0]) + 99) % 99 - (order.indexOf(b[0]) + 99) % 99)

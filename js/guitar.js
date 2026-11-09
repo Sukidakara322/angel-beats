@@ -83,12 +83,21 @@ SoundPad.Guitar = class Guitar {
     this.amp = null;               // amp nodes, built on first use
     this.altUp = false;            // alternate-strum state
     this.liveDur = 1.2;            // how long a note rings when played live from the keyboard
+    this.cacheMax = 72;            // max cached note buffers
     this.presetId = presetId;
     this.overrides = overrides || {};
-    this.p = SoundPad.guitarParams(presetId, this.overrides);
+    this.p = this._params(presetId, this.overrides);
   }
 
   get ctx() { return this.engine.ctx; }
+
+  /** Preset + tweaks → effective params (subclasses use their own presets). */
+  _params(presetId, overrides) { return SoundPad.guitarParams(presetId, overrides); }
+
+  /** The params that shape the STRING (everything else is the amp). */
+  _stringOptions(p) {
+    return { pickup: p.pickup, bright: p.bright, sustain: p.sustain, mute: p.mute };
+  }
 
   setPreset(id) {
     this.presetId = id;
@@ -103,7 +112,7 @@ SoundPad.Guitar = class Guitar {
   }
 
   _paramsChanged() {
-    this.p = SoundPad.guitarParams(this.presetId, this.overrides);
+    this.p = this._params(this.presetId, this.overrides);
     if (this.amp) this._applyAmp();
   }
 
@@ -163,7 +172,8 @@ SoundPad.Guitar = class Guitar {
     const take = this.takes++ % 3;
     const velBucket = Math.round(vel * 3);
     const sr = this.ctx.sampleRate;
-    const key = [midi, velBucket, take, p.pickup, p.bright, p.sustain, p.mute, sr].join("|");
+    const opts = this._stringOptions(p);
+    const key = [midi, velBucket, take, sr, ...Object.values(opts)].join("|");
     let buf = this.cache.get(key);
     if (buf) {
       this.cache.delete(key);       // refresh LRU position
@@ -171,13 +181,12 @@ SoundPad.Guitar = class Guitar {
       return buf;
     }
     const data = SoundPad.Guitar.renderString({
-      freq: SoundPad.midiToFreq(midi), sr, vel: velBucket / 3,
-      pickup: p.pickup, bright: p.bright, sustain: p.sustain, mute: p.mute,
+      freq: SoundPad.midiToFreq(midi), sr, vel: velBucket / 3, ...opts,
     });
     buf = this.ctx.createBuffer(1, data.length, sr);
     buf.getChannelData(0).set(data);
     this.cache.set(key, buf);
-    if (this.cache.size > 72) this.cache.delete(this.cache.keys().next().value);
+    if (this.cache.size > this.cacheMax) this.cache.delete(this.cache.keys().next().value);
     return buf;
   }
 
@@ -185,18 +194,38 @@ SoundPad.Guitar = class Guitar {
    * Render one plucked note into a Float32Array.
    * Pure function (no audio context) — easy to test and reuse.
    */
-  static renderString({ freq, sr, vel = 0.8, pickup = "middle", bright = 0.55, sustain = 0.6, mute = false }) {
+  static renderString({
+    freq, sr, vel = 0.8, pickup = "middle", bright = 0.55, sustain = 0.6, mute = false,
+    pickPos = 0.13,     // where the string is picked (fraction of its length from the bridge)
+    pickups = null,     // pickup positions (fractions); several = pickups mixed together
+    res = null,         // pickup resonance [freq, Q]
+    loopLp = 0,         // extra top-end damping inside the string (Hz; thick bass strings)
+    ring = 1,           // ring-time multiplier
+    maxLen = 7,         // longest note buffer (s)
+    shape = "noise",    // "noise": a burst of noise (guitar) · "pluck": the string pulled into a
+                        //   triangle at the pick point → strong fundamental (bass)
+    grit = 0,           // "pluck": pick-scrape noise on top of the triangle
+    soften = 0,         // "pluck": rounds the attack (Hz of a low-pass on the pluck; 0 = off)
+  }) {
     const P = sr / freq;                                   // period in samples
     // Ring time (to -60 dB): longer for low strings, much shorter when palm-muted.
     const t60 = mute
       ? 0.2 + sustain * 0.35
-      : (0.8 + sustain * 7) * Math.pow(110 / freq, 0.45);
-    const len = Math.ceil(sr * (Math.min(7, t60 * 0.85) + 0.05));
+      : (0.8 + sustain * 7) * Math.pow(110 / freq, 0.45) * ring;
+    const len = Math.ceil(sr * (Math.min(maxLen, t60 * 0.85) + 0.05));
     const out = new Float32Array(len);
 
     // Loop filter: weighted 2-tap average. s → 1 = less damping (brighter ring).
     const s = mute ? 0.5 : 0.5 + 0.42 * (0.35 + 0.65 * bright) * (0.6 + 0.4 * sustain);
-    const D = P - (1 - s);                                 // compensate the filter's delay → in tune
+    // Optional one-pole low-pass inside the loop: palm mute (thuddy, short) or a
+    // thick string whose highs die quickly. Its delay is compensated so it stays in tune.
+    const mc = mute ? 0.35 : loopLp ? 1 - Math.exp((-2 * Math.PI * loopLp) / sr) : 0;
+    let lpDelay = 0;
+    if (mc) {
+      const w = (2 * Math.PI * freq) / sr, a = 1 - mc;
+      lpDelay = Math.atan2(a * Math.sin(w), 1 - a * Math.cos(w)) / w;
+    }
+    const D = P - (1 - s) - lpDelay;                       // compensate the filters' delay → in tune
     const g = Math.pow(0.001, 1 / (t60 * freq));           // per-period loss for the chosen ring time
 
     // Excitation: one period of noise, darker for soft picking / low brightness,
@@ -204,13 +233,29 @@ SoundPad.Guitar = class Guitar {
     const n = Math.max(2, Math.round(P));
     const exc = new Float32Array(n);
     const c = Math.min(0.97, 0.15 + 0.8 * bright * (0.55 + 0.45 * vel)) * (mute ? 0.55 : 1);
-    let lp = 0;
-    for (let i = 0; i < n; i++) {
-      lp += c * ((Math.random() * 2 - 1) - lp);
-      exc[i] = lp;
+    if (shape === "pluck") {
+      // Triangle with its apex at the pick point: harmonics fall off like a real pluck
+      // (the pick-position notches are built in). Mean removed so no DC circulates.
+      const apex = Math.min(n - 1, Math.max(1, Math.round(n * pickPos)));
+      let mean = 0;
+      for (let i = 0; i < n; i++) { exc[i] = i < apex ? i / apex : (n - i) / (n - apex); mean += exc[i]; }
+      mean /= n;
+      const cs = soften ? 1 - Math.exp((-2 * Math.PI * soften) / sr) : 1;
+      let nz = 0, lp = 0;
+      for (let i = 0; i < n; i++) {
+        nz += c * ((Math.random() * 2 - 1) - nz);
+        lp += cs * (exc[i] - mean + grit * nz - lp);
+        exc[i] = lp;
+      }
+    } else {
+      let lp = 0;
+      for (let i = 0; i < n; i++) {
+        lp += c * ((Math.random() * 2 - 1) - lp);
+        exc[i] = lp;
+      }
+      const pick = Math.max(1, Math.round(P * pickPos));
+      for (let i = n - 1; i >= pick; i--) exc[i] -= exc[i - pick];
     }
-    const pick = Math.max(1, Math.round(P * 0.13));
-    for (let i = n - 1; i >= pick; i--) exc[i] -= exc[i - pick];
 
     // The string loop (fractional delay with linear interpolation → accurate tuning).
     const read = (t) => {
@@ -218,25 +263,34 @@ SoundPad.Guitar = class Guitar {
       const i0 = Math.floor(t), f = t - i0;
       return out[i0] * (1 - f) + (i0 + 1 < len ? out[i0 + 1] : 0) * f;
     };
-    // Extra one-pole low-pass inside the loop when palm-muted (thuddy, short).
     let mlp = 0;
-    const mc = 0.35;
     for (let i = 0; i < len; i++) {
       let fb = g * (s * read(i - D) + (1 - s) * read(i - D - 1));
-      if (mute) { mlp += mc * (fb - mlp); fb = mlp; }
+      if (mc) { mlp += mc * (fb - mlp); fb = mlp; }
       out[i] = (i < n ? exc[i] : 0) + fb;
     }
 
-    // Pickup position: comb on the output (which harmonics the pickup "sees")…
-    const pu = { neck: 0.27, middle: 0.17, bridge: 0.09 }[pickup] || 0.17;
-    const k = Math.max(1, Math.round(P * pu));
-    for (let i = len - 1; i >= k; i--) out[i] -= out[i - k];
-    for (let i = k - 1; i >= 0; i--) out[i] = 0.5 * out[i];
+    // Pickup position: comb on the output (which harmonics the pickup "sees");
+    // several pickups = their outputs mixed (e.g. both pickups on a bass).
+    const pos = pickups || [{ neck: 0.27, middle: 0.17, bridge: 0.09 }[pickup] || 0.17];
+    const ks = pos.map((x) => Math.max(1, Math.round(P * x)));
+    if (ks.length === 1) {
+      const k = ks[0];
+      for (let i = len - 1; i >= k; i--) out[i] -= out[i - k];
+      for (let i = k - 1; i >= 0; i--) out[i] = 0.5 * out[i];
+    } else {
+      const src = out.slice();
+      for (let i = 0; i < len; i++) {
+        let acc = 0;
+        for (const k of ks) acc += i >= k ? src[i] - src[i - k] : 0.5 * src[i];
+        out[i] = acc / ks.length;
+      }
+    }
 
     // …and the pickup's own electrical resonance: a resonant low-pass that sits
     // low for the neck pickup (warm) and high for the bridge pickup (bright).
-    const res = { neck: [2300, 1.1], middle: [3400, 1.3], bridge: [5200, 1.6] }[pickup] || [3400, 1.3];
-    SoundPad.Guitar._lowpass(out, sr, res[0], res[1]);
+    const r = res || { neck: [2300, 1.1], middle: [3400, 1.3], bridge: [5200, 1.6] }[pickup] || [3400, 1.3];
+    SoundPad.Guitar._lowpass(out, sr, r[0], r[1]);
 
     // Normalise: same loudness across the neck (RMS of the first ~60 ms).
     const win = Math.min(len, Math.round(sr * 0.06));

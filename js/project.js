@@ -5,7 +5,7 @@
  *   Project {
  *     version: 3, name, bpm,
  *     tracks:   [{ id, name, type, preset, params, volume, pan, mute, solo, currentPartId }],
- *               type = instrument engine ("drums" | "synth" | "guitar"),
+ *               type = instrument engine ("drums" | "synth" | "guitar" | "bass-guitar"),
  *               preset = its sound, params = this track's tweaks on top of the preset
  *     parts:    [{ id, trackId, name, minLength, notes: [{ step, len, key, vel }] }],
  *     timeline: { clips: [{ id, trackId, partId, start, length }],
@@ -34,7 +34,7 @@ SoundPad.Project = {
   MAX_PART_STEPS: 32 * 16,        // 32 bars
   MAX_SONG_STEPS: 999 * 16,
   MAX_TRACKS: 32,
-  DEFAULT_PRESETS: { drums: "hard", synth: "growl-bass", guitar: "clean" },
+  DEFAULT_PRESETS: { drums: "hard", synth: "growl-bass", guitar: "clean", "bass-guitar": "metal-bass" },
 
   uid(prefix) {
     return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
