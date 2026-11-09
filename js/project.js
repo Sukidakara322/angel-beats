@@ -4,7 +4,9 @@
  *
  *   Project {
  *     version: 3, name, bpm,
- *     tracks:   [{ id, name, type, volume, pan, mute, solo, currentPartId }],
+ *     tracks:   [{ id, name, type, preset, params, volume, pan, mute, solo, currentPartId }],
+ *               type = instrument engine ("drums" | "synth" | "guitar"),
+ *               preset = its sound, params = this track's tweaks on top of the preset
  *     parts:    [{ id, trackId, name, minLength, notes: [{ step, len, key, vel }] }],
  *     timeline: { clips: [{ id, trackId, partId, start, length }],
  *                 loop: { start, end } | null }
@@ -31,6 +33,8 @@ SoundPad.Project = {
   BAR: 16,
   MAX_PART_STEPS: 32 * 16,        // 32 bars
   MAX_SONG_STEPS: 999 * 16,
+  MAX_TRACKS: 32,
+  DEFAULT_PRESETS: { drums: "hard", synth: "growl-bass", guitar: "clean" },
 
   uid(prefix) {
     return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -46,19 +50,21 @@ SoundPad.Project = {
       parts: [],
       timeline: { clips: [], loop: null },
     };
-    this.addTrack(p, "drums", "Drums");
-    this.addTrack(p, "bass", "Bass");
+    this.addTrack(p, "drums", "Drums", "hard");
+    this.addTrack(p, "synth", "Bass", "growl-bass");
     return p;
   },
 
   // --- Tracks --------------------------------------------------------
 
-  /** Add a track (with one empty part) and return it. */
-  addTrack(p, type, name) {
+  /** Add a track (with one empty part) and return it. Names are made unique ("Pad", "Pad 2"). */
+  addTrack(p, type, name, preset) {
     const track = {
       id: this.uid("trk"),
-      name,
+      name: this._uniqueTrackName(p, name),
       type,
+      preset: preset || this.DEFAULT_PRESETS[type] || null,
+      params: {},
       volume: 1,
       pan: 0,
       mute: false,
@@ -72,6 +78,49 @@ SoundPad.Project = {
 
   track(p, id) {
     return p.tracks.find((t) => t.id === id) || null;
+  },
+
+  _uniqueTrackName(p, base, exceptId) {
+    const names = new Set(p.tracks.filter((t) => t.id !== exceptId).map((t) => t.name));
+    if (!names.has(base)) return base;
+    for (let n = 2; ; n++) if (!names.has(`${base} ${n}`)) return `${base} ${n}`;
+  },
+
+  renameTrack(p, trackId, name) {
+    const track = this.track(p, trackId);
+    const clean = (name || "").trim().slice(0, 30);
+    if (track && clean) track.name = this._uniqueTrackName(p, clean, trackId);
+  },
+
+  /** Change a track's sound (same engine type keeps all its parts playable). Tweaks reset. */
+  setTrackPreset(p, trackId, preset) {
+    const track = this.track(p, trackId);
+    if (!track) return;
+    track.preset = preset;
+    track.params = {};
+  },
+
+  /** Tweak one sound control of a track (stored on top of its preset). */
+  setTrackParam(p, trackId, id, value) {
+    const track = this.track(p, trackId);
+    if (track) track.params = { ...track.params, [id]: value };
+  },
+
+  resetTrackParams(p, trackId) {
+    const track = this.track(p, trackId);
+    if (track) track.params = {};
+  },
+
+  /**
+   * Delete a track with all its parts and clips. The last track can't be
+   * deleted (returns false).
+   */
+  deleteTrack(p, trackId) {
+    if (p.tracks.length <= 1 || !this.track(p, trackId)) return false;
+    p.tracks = p.tracks.filter((t) => t.id !== trackId);
+    p.parts = p.parts.filter((x) => x.trackId !== trackId);
+    p.timeline.clips = p.timeline.clips.filter((c) => c.trackId !== trackId);
+    return true;
   },
 
   // --- Parts ---------------------------------------------------------
@@ -359,6 +408,10 @@ SoundPad.Project = {
     });
 
     p.tracks.forEach((t) => {
+      if (t.type === "bass") { t.type = "synth"; t.preset = "growl-bass"; }   // pre-Phase-3 bass track
+      if (!this.DEFAULT_PRESETS[t.type]) t.type = "synth";
+      t.preset = t.preset || this.DEFAULT_PRESETS[t.type];
+      t.params = t.params && typeof t.params === "object" && !Array.isArray(t.params) ? t.params : {};
       t.volume = t.volume ?? 1;
       t.pan = t.pan ?? 0;
       t.mute = !!t.mute;
@@ -387,8 +440,8 @@ SoundPad.Project = {
     delete p.partSteps;
 
     if (!p.tracks.length) {
-      this.addTrack(p, "drums", "Drums");
-      this.addTrack(p, "bass", "Bass");
+      this.addTrack(p, "drums", "Drums", "hard");
+      this.addTrack(p, "synth", "Bass", "growl-bass");
     }
     p.tracks.forEach((t) => {
       if (!this.part(p, t.currentPartId)) {

@@ -11,6 +11,10 @@
     <div class="brand">🥁 Sound&nbsp;Pad</div>
     <nav class="instruments">
       <div class="instruments" id="trackTabs"><!-- one tab per track, built by app.js --></div>
+      <div class="add-track">
+        <button class="inst add" id="addTrackBtn" title="Add an instrument track">+ Add track</button>
+        <div class="add-menu hidden" id="addMenu"><!-- built by app.js --></div>
+      </div>
       <button class="inst song-tab" id="songTab" title="Arrange parts on the timeline">♫ Song</button>
     </nav>
   </header>
@@ -42,15 +46,26 @@
       <span class="hint" id="statusHint">Press ▶ or Space to start · Arm REC then hit pads to record</span>
     </section>
 
-    <!-- Parts of the active track -->
+    <!-- Active track: its sound + its parts -->
     <section class="partbar" id="partBar">
-      <span class="pb-label" id="pbTrack">Parts</span>
-      <div class="pb-chips" id="pbChips"><!-- built by app.js --></div>
-      <div class="pb-actions">
-        <button id="pbNew" class="tbtn small" title="New empty part">+ New</button>
-        <button id="pbDup" class="tbtn small" title="Copy this part">Duplicate</button>
-        <button id="pbRename" class="tbtn small">Rename</button>
-        <button id="pbDelete" class="tbtn small danger">Delete</button>
+      <div class="trackbar">
+        <span class="tb-name" id="tbName">Track</span>
+        <label class="mini-ctrl" title="The track's sound — notes and parts stay as they are">Sound
+          <select id="tbPreset"><!-- built by app.js --></select>
+        </label>
+        <span class="tb-spacer"></span>
+        <button id="tbRename" class="tbtn small">Rename track</button>
+        <button id="tbDelete" class="tbtn small danger">Delete track</button>
+      </div>
+      <div class="partrow">
+        <span class="pb-label" id="pbTrack">Parts</span>
+        <div class="pb-chips" id="pbChips"><!-- built by app.js --></div>
+        <div class="pb-actions">
+          <button id="pbNew" class="tbtn small" title="New empty part">+ New</button>
+          <button id="pbDup" class="tbtn small" title="Copy this part">Duplicate</button>
+          <button id="pbRename" class="tbtn small">Rename</button>
+          <button id="pbDelete" class="tbtn small danger">Delete</button>
+        </div>
       </div>
     </section>
 
@@ -82,9 +97,11 @@
   <script src="js/engine.js"></script>
   <script src="js/instruments.js"></script>
   <script src="js/drums.js"></script>
-  <script src="js/bass.js"></script>
+  <script src="js/synth.js"></script>
+  <script src="js/guitar.js"></script>
   <script src="js/project.js"></script>
   <script src="js/player.js"></script>
+  <script src="js/param-panel.js"></script>
   <script src="js/velocity-lane.js"></script>
   <script src="js/length-ruler.js"></script>
   <script src="js/drum-view.js"></script>

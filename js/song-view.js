@@ -234,6 +234,13 @@ SoundPad.SongView = class SongView {
       const name = document.createElement("div");
       name.className = "tl-track-name";
       name.textContent = track.name;
+      const soundName = SoundPad.Instruments.presetOf(track).name;
+      if (soundName !== track.name) {      // "Bass · Growl Bass", but not "Warm Pad · Warm Pad"
+        const sound = document.createElement("span");
+        sound.className = "tl-track-preset";
+        sound.textContent = soundName;
+        name.appendChild(sound);
+      }
 
       const pick = document.createElement("select");
       pick.className = "tl-pick";

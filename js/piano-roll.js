@@ -410,10 +410,19 @@ SoundPad.PianoRollView = class PianoRollView {
 
   async _preview(midi, vel = SoundPad.DEFAULT_VEL) {
     await this.engine.init();
-    this.synth.trigger(midi, this.engine.ctx.currentTime, 0.18, vel);
+    // Instruments that ring (guitar) get a longer preview so you hear the note.
+    this.synth.trigger(midi, this.engine.ctx.currentTime, this.synth.liveDur ? 0.6 : 0.18, vel);
   }
 
   // --- Keyboard / octave ---------------------------------------------
+
+  /** Move the playable keyboard to start at `midi` (e.g. after the track's sound changed). */
+  setBase(midi) {
+    this.baseMidi = Math.min(this.MAX_BASE, Math.max(this.MIN_BASE, midi));
+    this._buildKeys();
+    this._updateOctaveLabel();
+    this._scrollToBase();
+  }
 
   shiftOctave(delta) {
     const next = Math.min(this.MAX_BASE, Math.max(this.MIN_BASE, this.baseMidi + delta));
@@ -452,7 +461,7 @@ SoundPad.PianoRollView = class PianoRollView {
   async playLive(midi) {
     await this.engine.init();
     const now = this.engine.ctx.currentTime;
-    this.synth.trigger(midi, now, 0.25);
+    this.synth.trigger(midi, now, this.synth.liveDur || 0.25);
     this._flashKey(midi);
     if (this.recordArmed && this.engine.isPlaying && midi >= this.LOW && midi <= this.HIGH) {
       const step = this.engine.quantizeToStep(now) % SoundPad.Project.partLength(this.part);

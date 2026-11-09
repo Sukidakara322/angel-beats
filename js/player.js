@@ -93,10 +93,14 @@ SoundPad.Player = class Player {
       locals[track.id] = part && part.id === track.currentPartId ? local : -1;
 
       if (!part || track.mute || (anySolo && !track.solo)) continue;
-      for (const n of part.notes) {
-        if (n.step !== local) continue;
-        // Gate slightly short of the full length so repeated notes re-articulate.
-        instrument.trigger(n.key, time, n.len * sps - sps * 0.05, n.vel);
+      // Gate slightly short of the full length so repeated notes re-articulate.
+      const gate = (n) => n.len * sps - sps * 0.05;
+      const starts = part.notes.filter((n) => n.step === local);
+      if (starts.length > 1 && instrument.triggerChord) {
+        // Instruments that care (guitar strums) get the whole chord at once.
+        instrument.triggerChord(starts.map((n) => ({ key: n.key, dur: gate(n), vel: n.vel })), time);
+      } else {
+        for (const n of starts) instrument.trigger(n.key, time, gate(n), n.vel);
       }
     }
     return { step, songStep, locals };

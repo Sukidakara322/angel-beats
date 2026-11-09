@@ -5,12 +5,20 @@
  * instrument and to tell it which editor view to use.
  *
  * Instrument contract (all instruments implement it):
- *   new Instrument(engine, channel)
+ *   new Instrument(engine, channel, presetId)
  *   trigger(key, time, durSec, vel)  — key is a drum id or a MIDI number
+ *   setPreset(presetId)              — switch sound, same instrument
  *
  * Registry entry:
- *   { label, editor: "<SoundPad view class name>", options?, create(engine, channel) }
- *   `options` is passed to the editor (e.g. the piano-roll note range).
+ *   { label, editor: "<SoundPad view class name>",
+ *     presets: [{ id, name, category, … }], defaultPreset,
+ *     create(engine, channel, presetId, paramOverrides),
+ *     editorOptions?(track) → options passed to the editor (e.g. piano-roll range),
+ *     params?: [schema]           → the track gets a "Sound controls" panel,
+ *     effectiveParams?(track)     → preset values + the track's tweaks }
+ *
+ * Optional instrument extras: setParams(overrides), triggerChord(notes, time),
+ * liveDur (how long a note rings when played from the keyboard).
  * ------------------------------------------------------------------ */
 window.SoundPad = window.SoundPad || {};
 
@@ -32,5 +40,29 @@ SoundPad.Instruments = {
     const def = this.types[type];
     if (!def) throw new Error(`Unknown instrument type "${type}"`);
     return def;
+  },
+
+  /** A preset's entry ({ id, name, category, … }) for a track. */
+  presetOf(track) {
+    const def = this.get(track.type);
+    return def.presets.find((x) => x.id === track.preset) || def.presets[0];
+  },
+
+  /**
+   * Everything that can become a track, grouped for menus:
+   *   [{ category, items: [{ type, preset, name }] }]
+   */
+  catalog() {
+    const groups = new Map();
+    Object.entries(this.types).forEach(([type, def]) => {
+      def.presets.forEach((pr) => {
+        if (!groups.has(pr.category)) groups.set(pr.category, []);
+        groups.get(pr.category).push({ type, preset: pr.id, name: pr.name });
+      });
+    });
+    const order = ["Drums", "Guitar", "Bass", "Lead", "Pad", "Keys", "FX"];
+    return [...groups.entries()]
+      .sort((a, b) => (order.indexOf(a[0]) + 99) % 99 - (order.indexOf(b[0]) + 99) % 99)
+      .map(([category, items]) => ({ category, items }));
   },
 };

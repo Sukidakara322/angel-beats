@@ -3,6 +3,7 @@
  * Owns the current Project and wires it to audio + UI:
  *   • for every track: a Channel (volume/pan), an Instrument (from the
  *     registry) and an editor view, plus a tab in the top bar
+ *   • "+ Add track", and the track bar (sound / rename / delete track)
  *   • the Song tab (timeline) and the Pattern / Song play mode
  *   • the shared transport (play / record / tempo / volume / position)
  *   • parts bar, save / load, keyboard routing, playhead drawing
@@ -48,6 +49,12 @@
   const pbDup = $("pbDup");
   const pbRename = $("pbRename");
   const pbDelete = $("pbDelete");
+  const tbNameEl = $("tbName");
+  const tbPreset = $("tbPreset");
+  const tbRename = $("tbRename");
+  const tbDelete = $("tbDelete");
+  const addTrackBtn = $("addTrackBtn");
+  const addMenu = $("addMenu");
 
   const IDLE_HINT = "Press ▶ or Space to start · Arm REC then play to record";
 
@@ -80,22 +87,53 @@
       const channel = new SoundPad.Channel(engine);
       channel.setVolume(track.volume);
       channel.setPan(track.pan);
-      const instrument = def.create(engine, channel);
+      const instrument = def.create(engine, channel, track.preset, track.params);
 
       const root = document.createElement("div");
       root.className = "inst-view hidden";
       viewsEl.appendChild(root);
+
+      // Instruments with adjustable sound get a "Sound controls" panel above the editor.
+      let panel = null;
+      if (def.params) {
+        const host = document.createElement("section");
+        root.appendChild(host);
+        panel = new SoundPad.ParamPanel(host, {
+          schema: def.params,
+          values: () => def.effectiveParams(track),
+          edited: () => Object.keys(track.params).length > 0,
+          onChange: (id, value, commit) => {
+            P.setTrackParam(project, track.id, id, value);
+            instrument.setParams(track.params);
+            if (commit) { panel.render(); previewSound(rtOf(track.id)); }
+          },
+          onReset: () => {
+            P.resetTrackParams(project, track.id);
+            instrument.setParams(track.params);
+            panel.render();
+            previewSound(rtOf(track.id));
+          },
+        });
+        panel.render();
+      }
+
+      const editorRoot = document.createElement("div");
+      editorRoot.className = "inst-editor";
+      root.appendChild(editorRoot);
       const View = SoundPad[def.editor];
-      const view = new View({ engine, root, project, track, instrument, options: def.options });
+      const options = def.editorOptions ? def.editorOptions(track) : {};
+      const view = new View({ engine, root: editorRoot, project, track, instrument, options });
       view.build();
 
       const tab = document.createElement("button");
       tab.className = "inst";
       tab.textContent = track.name;
+      tab.title = `${SoundPad.Instruments.presetOf(track).name} · double-click to rename`;
       tab.addEventListener("click", () => setActive(track.id));
+      tab.addEventListener("dblclick", () => renameTrack(track.id));
       tabsEl.appendChild(tab);
 
-      return { track, channel, instrument, view, root, tab };
+      return { track, channel, instrument, view, root, tab, panel };
     });
 
     songView = new SoundPad.SongView({
@@ -109,6 +147,7 @@
 
     player.setProject(project, rts);
     clearPlayheads();
+    addTrackBtn.disabled = project.tracks.length >= P.MAX_TRACKS;
 
     if (prevActive === SONG) return setActive(SONG);
     const keep = rtOf(prevActive) || rts.find((rt) => rt.track.type === prevType) || rts[0];
@@ -175,7 +214,7 @@
     const rt = activeRt();
     if (!recordArmed) statusHint.textContent = IDLE_HINT;
     else if (rt) statusHint.textContent = `Recording ${rt.track.name} — play the pads/keys while it loops`;
-    else statusHint.textContent = "Recording works in a track tab — open Drums or Bass to record";
+    else statusHint.textContent = "Recording works in a track tab — open a track to record";
   }
 
   function toggleRecord() {
@@ -195,15 +234,128 @@
     if (rt) rt.view.clear();
   }
 
+  // --- Tracks: add / sound / rename / delete -------------------------
+
+  /** Build the "+ Add track" menu from every instrument preset, by category. */
+  function buildAddMenu() {
+    addMenu.innerHTML = "";
+    SoundPad.Instruments.catalog().forEach(({ category, items }) => {
+      const col = document.createElement("div");
+      col.className = "am-col";
+      const h = document.createElement("h3");
+      h.textContent = category;
+      col.appendChild(h);
+      items.forEach((it) => {
+        const b = document.createElement("button");
+        b.className = "am-item";
+        b.textContent = it.name;
+        b.addEventListener("click", () => addTrack(it));
+        col.appendChild(b);
+      });
+      addMenu.appendChild(col);
+    });
+  }
+
+  function toggleAddMenu(open = addMenu.classList.contains("hidden")) {
+    addMenu.classList.toggle("hidden", !open);
+    addTrackBtn.classList.toggle("active", open);
+  }
+
+  function addTrack({ type, preset, name }) {
+    toggleAddMenu(false);
+    if (project.tracks.length >= P.MAX_TRACKS) return;
+    const trackName = type === "drums" ? "Drums" : name;
+    const track = P.addTrack(project, type, trackName, preset);
+    mountProject(project);
+    setActive(track.id);
+    previewSound(rtOf(track.id));
+  }
+
+  /** A short sample of a track's sound (after picking or changing it). */
+  async function previewSound(rt) {
+    await engine.init();
+    const t = engine.ctx.currentTime + 0.02;
+    if (rt.track.type === "drums") {
+      rt.instrument.trigger("kick", t, 0);
+      rt.instrument.trigger("hat", t + 0.18, 0);
+      rt.instrument.trigger("snare", t + 0.36, 0);
+    } else if (rt.track.type === "guitar") {
+      // Distorted: an E5 power chord · clean: an open E major chord.
+      const keys = rt.instrument.p.dist ? [40, 47, 52] : [40, 47, 52, 56, 59, 64];
+      rt.instrument.triggerChord(keys.map((key) => ({ key, dur: 1.4, vel: SoundPad.DEFAULT_VEL })), t);
+    } else {
+      const base = SoundPad.synthPreset(rt.track.preset).base;
+      const root = base < 40 ? base + 12 : base;
+      rt.instrument.trigger(root, t, 0.6);
+    }
+  }
+
+  function changePreset(preset) {
+    const rt = activeRt();
+    P.setTrackPreset(project, rt.track.id, preset);    // also resets the track's tweaks
+    rt.instrument.setPreset(preset);
+    if (rt.panel) rt.panel.render();
+    const def = SoundPad.Instruments.get(rt.track.type);
+    if (def.editorOptions && rt.view.setBase) rt.view.setBase(def.editorOptions(rt.track).base);
+    rt.tab.title = `${SoundPad.Instruments.presetOf(rt.track).name} · double-click to rename`;
+    previewSound(rt);
+  }
+
+  function renameTrack(trackId) {
+    const rt = rtOf(trackId);
+    const name = prompt("Rename track", rt.track.name);
+    if (name === null) return;
+    P.renameTrack(project, trackId, name);
+    rt.tab.textContent = rt.track.name;
+    rt.view.refresh();
+    renderPartBar();
+  }
+
+  function deleteTrack() {
+    const rt = activeRt();
+    const parts = P.partsOf(project, rt.track.id).length;
+    const clips = P.clipsOf(project, rt.track.id).length;
+    if (!confirm(`Delete the track "${rt.track.name}" with its ${parts} part(s)${clips ? ` and ${clips} clip(s) in the song` : ""}?`)) return;
+    P.deleteTrack(project, rt.track.id);
+    active = null;
+    mountProject(project);
+  }
+
+  addTrackBtn.addEventListener("click", (e) => { e.stopPropagation(); toggleAddMenu(); });
+  addMenu.addEventListener("click", (e) => e.stopPropagation());
+  document.addEventListener("click", () => toggleAddMenu(false));
+  tbPreset.addEventListener("change", () => changePreset(tbPreset.value));
+  tbRename.addEventListener("click", () => renameTrack(active));
+  tbDelete.addEventListener("click", deleteTrack);
+
   // --- Parts (per track) --------------------------------------------
 
-  /** Chips for the active track's parts + enable/disable actions. */
+  /** Track bar (sound, rename, delete) + chips for the active track's parts. */
   function renderPartBar() {
     const rt = activeRt();
     if (!rt) return;
     const track = rt.track;
     const parts = P.partsOf(project, track.id);
-    pbTrackEl.textContent = `${track.name} parts`;
+
+    tbNameEl.textContent = track.name;
+    const def = SoundPad.Instruments.get(track.type);
+    tbPreset.innerHTML = "";
+    const groups = {};
+    def.presets.forEach((pr) => {
+      if (!groups[pr.category]) {
+        groups[pr.category] = document.createElement("optgroup");
+        groups[pr.category].label = pr.category;
+        tbPreset.appendChild(groups[pr.category]);
+      }
+      const opt = document.createElement("option");
+      opt.value = pr.id;
+      opt.textContent = pr.name;
+      groups[pr.category].appendChild(opt);
+    });
+    tbPreset.value = track.preset;
+    tbDelete.disabled = project.tracks.length <= 1;
+
+    pbTrackEl.textContent = "Parts";
     pbChipsEl.innerHTML = "";
     parts.forEach((part) => {
       const chip = document.createElement("button");
@@ -394,6 +546,7 @@
     engine,
   };
 
+  buildAddMenu();
   storeNoteEl.textContent = SoundPad.Store.backendLabel();
   storeNoteEl.classList.toggle("warn", !SoundPad.Store.useServer);
   engine.setVolume(parseFloat(volumeInput.value));

@@ -26,6 +26,7 @@ html, body {
 
 /* ---------- Top bar ---------- */
 .topbar {
+  position: relative; z-index: 10;   /* keeps the add-track menu above the page */
   display: flex;
   align-items: center;
   gap: 24px;
@@ -102,11 +103,38 @@ html, body {
 
 /* ---------- Part bar ---------- */
 .partbar {
-  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  display: flex; flex-direction: column; gap: 10px;
   padding: 10px 14px;
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
   margin-bottom: -8px;
 }
+.trackbar, .partrow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.trackbar { padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.tb-name { font-size: 15px; font-weight: 700; }
+.tb-spacer { flex: 1; }
+
+/* ---------- Add-track menu ---------- */
+.instruments { flex-wrap: wrap; }
+.add-track { position: relative; }
+.inst.add { color: var(--accent-2); border-style: dashed; }
+.inst.add.active { background: var(--panel); color: var(--text); }
+.add-menu {
+  position: fixed; top: 62px; right: 16px; z-index: 20;
+  max-width: calc(100vw - 32px); flex-wrap: wrap;
+  display: flex; gap: 18px; padding: 14px 16px;
+  background: var(--panel); border: 1px solid #3a4453; border-radius: var(--radius);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+.add-menu.hidden { display: none; }
+.am-col { display: flex; flex-direction: column; gap: 4px; min-width: 120px; }
+.am-col h3 { margin: 0 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); }
+.am-item {
+  text-align: left; padding: 6px 10px; font-size: 13px; cursor: pointer; white-space: nowrap;
+  background: transparent; color: var(--text); border: 1px solid transparent; border-radius: 6px;
+}
+.am-item:hover { background: var(--panel-2); border-color: var(--line); }
+.tl-track-preset { margin-left: 6px; font-size: 11px; font-weight: 400; color: var(--muted); }
+.tl-track-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pb-label { font-size: 13px; color: var(--muted); white-space: nowrap; }
 .pb-chips { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; }
 .pb-actions { display: flex; gap: 6px; }
@@ -197,8 +225,39 @@ html, body {
 .hint { margin-left: auto; font-size: 12px; color: var(--muted); max-width: 320px; }
 
 /* ---------- Instrument views ---------- */
-.inst-view { display: flex; flex-direction: column; gap: 22px; }
+.inst-view, .inst-editor { display: flex; flex-direction: column; gap: 22px; }
 .inst-view.hidden { display: none; }
+
+/* ---------- Sound controls (param panel) ---------- */
+.param-panel {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 14px 16px;
+}
+.pp-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.pp-head h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.pp-edited { font-size: 12px; color: var(--muted); flex: 1; }
+.pp-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px 22px; }
+.pp-group { display: flex; flex-direction: column; gap: 8px; }
+.pp-group h4 {
+  margin: 0 0 2px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted);
+  border-bottom: 1px solid var(--line); padding-bottom: 5px;
+}
+.pp-row { display: flex; align-items: center; gap: 10px; min-height: 30px; }
+.pp-label { width: 88px; flex-shrink: 0; font-size: 13px; color: var(--text); }
+.pp-row input[type="range"] { flex: 1; min-width: 0; accent-color: var(--step-on); }
+.pp-value { width: 52px; text-align: right; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pp-switch {
+  min-width: 64px; padding: 6px 12px; font-size: 12px; font-weight: 700; letter-spacing: 0.5px; cursor: pointer;
+  background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); border-radius: 999px;
+}
+.pp-switch.on { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: 0 0 14px -4px var(--accent); }
+.pp-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.pp-seg button {
+  padding: 6px 10px; font-size: 12px; cursor: pointer;
+  background: var(--panel-2); color: var(--muted); border: 0;
+}
+.pp-seg button + button { border-left: 1px solid var(--line); }
+.pp-seg button.on { background: var(--step-on); color: #0e1116; font-weight: 600; }
 
 /* ---------- Pads ---------- */
 .pads {
