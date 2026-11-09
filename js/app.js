@@ -42,7 +42,6 @@
   const viewsEl = $("views");
   const songRoot = $("songView");
   const partBarEl = $("partBar");
-  const partLenSel = $("partLen");
   const pbTrackEl = $("pbTrack");
   const pbChipsEl = $("pbChips");
   const pbNew = $("pbNew");
@@ -75,8 +74,6 @@
     engine.setBpm(project.bpm);
     project.bpm = engine.bpm;
     bpmInput.value = engine.bpm;
-    partLenSel.value = String(project.partSteps);
-    document.documentElement.style.setProperty("--steps", project.partSteps);
 
     rts = project.tracks.map((track) => {
       const def = SoundPad.Instruments.get(track.type);
@@ -189,7 +186,7 @@
 
   function clearActive() {
     if (active === SONG) {
-      if (!confirm("Remove every part from the song timeline? (The parts themselves are kept.)")) return;
+      if (!confirm("Remove every clip from the song timeline? (The parts themselves are kept.)")) return;
       P.clearTimeline(project);
       songView.render();
       return;
@@ -208,10 +205,10 @@
     const parts = P.partsOf(project, track.id);
     pbTrackEl.textContent = `${track.name} parts`;
     pbChipsEl.innerHTML = "";
-    parts.forEach((part, idx) => {
+    parts.forEach((part) => {
       const chip = document.createElement("button");
       chip.className = "chip" + (part.id === track.currentPartId ? " active" : "");
-      chip.style.setProperty("--c", SoundPad.PART_COLORS[idx % SoundPad.PART_COLORS.length]);
+      chip.style.setProperty("--c", SoundPad.partColor(project, part.id));
       chip.textContent = part.name;
       chip.title = "Click to edit · double-click to rename";
       chip.addEventListener("click", () => selectPart(part.id));
@@ -248,38 +245,14 @@
   pbRename.addEventListener("click", () => renamePart(activeRt().track.currentPartId));
   pbDelete.addEventListener("click", () => {
     const part = P.currentPart(project, activeRt().track);
-    const used = Object.values(project.timeline.cells).flat().filter((id) => id === part.id).length;
+    const used = project.timeline.clips.filter((c) => c.partId === part.id).length;
     const warn = [];
     if (part.notes.length) warn.push(`its ${part.notes.length} notes`);
-    if (used) warn.push(`${used} slot(s) in the song`);
+    if (used) warn.push(`${used} clip(s) in the song`);
     if (warn.length && !confirm(`Delete "${part.name}"? This removes ${warn.join(" and ")}.`)) return;
     P.deletePart(project, part.id);
     partChanged();
   });
-
-  // --- Part length (project-wide) -----------------------------------
-
-  function changePartLength() {
-    const steps = parseInt(partLenSel.value, 10);
-    const old = project.partSteps;
-    if (steps === old) return;
-    const bars = (n) => `${n / 16} bar${n === 16 ? "" : "s"}`;
-
-    let repeat = false;
-    if (steps < old) {
-      const lost = P.notesBeyond(project, steps);
-      if (lost && !confirm(`Shorten every part to ${bars(steps)}? ${lost} note(s) after that will be removed.`)) {
-        partLenSel.value = String(old);
-        return;
-      }
-    } else if (project.parts.some((x) => x.notes.length)) {
-      repeat = confirm(
-        `Make every part ${bars(steps)} long.\n\nOK = repeat each part's ${bars(old)} to fill\nCancel = add empty space at the end`
-      );
-    }
-    P.setPartSteps(project, steps, { repeat });
-    mountProject(project);   // rebuild editors + timeline at the new length
-  }
 
   // --- Save / load ---------------------------------------------------
 
@@ -352,16 +325,15 @@
 
   // --- Playhead + position (decoupled from audio clock) --------------
 
-  /** "Bar 5 · 2" from the player's { slot, local } (null = stopped). */
+  /** "Song · Bar 5 · 2" from the player's info (null = stopped). */
   function showPosition(info) {
-    if (!info) {
-      const start = player.mode === "song" ? P.songRange(project).start : 0;
-      info = { slot: player.mode === "song" ? start : -1, local: 0 };
-    }
-    const songStep = (info.slot >= 0 ? info.slot * project.partSteps : 0) + info.local;
-    const bar = Math.floor(songStep / 16) + 1;
-    const beat = Math.floor((songStep % 16) / 4) + 1;
-    posEl.textContent = (info.slot >= 0 ? `Slot ${info.slot + 1} · ` : "") + `Bar ${bar} · ${beat}`;
+    const song = player.mode === "song";
+    let step;
+    if (info) step = info.songStep >= 0 ? info.songStep : info.step;
+    else step = song ? P.songRange(project).start : 0;
+    const bar = Math.floor(step / P.BAR) + 1;
+    const beat = Math.floor((step % P.BAR) / 4) + 1;
+    posEl.textContent = `${song ? "Song" : "Pattern"} · Bar ${bar} · ${beat}`;
   }
 
   function clearPlayheads() {
@@ -377,10 +349,10 @@
     let item = null;
     while (engine.drawQueue.length && engine.drawQueue[0].time <= now) item = engine.drawQueue.shift();
     if (!item || !item.info) return;
-    const { slot, local } = item.info;
-    rts.forEach((rt) => rt.view.highlightColumn(local));
-    if (slot >= 0) songView.setPlayhead(slot, local / project.partSteps);
-    else songView.clearPlayhead();
+    const { songStep, locals } = item.info;
+    // Each editor lights up its own position (or nothing if its part isn't playing).
+    rts.forEach((rt) => rt.view.highlightColumn(locals[rt.track.id] ?? -1));
+    songView.setPlayhead(songStep);
     showPosition(item.info);
   }
 
@@ -398,7 +370,6 @@
     project.bpm = engine.bpm;
   });
   volumeInput.addEventListener("input", () => engine.setVolume(parseFloat(volumeInput.value)));
-  partLenSel.addEventListener("change", changePartLength);
 
   saveBtn.addEventListener("click", saveCurrent);
   seqNameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") saveCurrent(); });
@@ -415,7 +386,13 @@
   // --- Init ----------------------------------------------------------
 
   // Read-only handle for debugging in the browser console.
-  SoundPad.app = { get project() { return project; }, player };
+  SoundPad.app = {
+    get project() { return project; },
+    get songView() { return songView; },
+    get tracks() { return rts; },
+    player,
+    engine,
+  };
 
   storeNoteEl.textContent = SoundPad.Store.backendLabel();
   storeNoteEl.classList.toggle("warn", !SoundPad.Store.useServer);

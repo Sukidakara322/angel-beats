@@ -3,29 +3,34 @@
  * Pure data + helpers (no audio, no DOM). A project is what gets saved.
  *
  *   Project {
- *     version: 2, name, bpm,
- *     partSteps,                 // every part in the project has this length
+ *     version: 3, name, bpm,
  *     tracks:   [{ id, name, type, volume, pan, mute, solo, currentPartId }],
- *     parts:    [{ id, trackId, name, notes: [{ step, len, key, vel }] }],
- *     timeline: { slots, cells: { [trackId]: [partId | null, ...] },
- *                 loop: { start, end } | null }   // slot range, end exclusive
+ *     parts:    [{ id, trackId, name, minLength, notes: [{ step, len, key, vel }] }],
+ *     timeline: { clips: [{ id, trackId, partId, start, length }],
+ *                 loop: { start, end } | null }
  *   }
  *
- * Timeline: every slot is exactly one part long (partSteps), and each
- * track's lane holds one of that track's parts per slot (or nothing).
+ * Everything is measured in 16th-note steps (BAR = 16 steps, 4/4).
  *
- * Notes are sparse: only notes that exist are stored. `key` is a drum id
- * ("kick") for drum tracks or a MIDI number (33) for pitched tracks.
- * `len` is in steps, `vel` is 0..1 (SoundPad.DEFAULT_VEL = normal).
+ * Parts have no fixed length: a part is as long as its content, rounded
+ * up to whole bars (min 1 bar). `minLength` (0 = auto) lets you keep it
+ * longer, e.g. to leave an empty bar at the end.
+ *
+ * The timeline is free: a clip places a part on its track's lane at any
+ * `start`. `length` null = the clip follows the part's length; a number
+ * = the clip repeats the part (longer) or cuts it short (shorter).
+ * If clips overlap in a lane, the one that starts later wins.
+ *
+ * Notes: `key` is a drum id ("kick") or a MIDI number (33), `len` is in
+ * steps, `vel` is 0..1 (SoundPad.DEFAULT_VEL = normal).
  * ------------------------------------------------------------------ */
 window.SoundPad = window.SoundPad || {};
 
 SoundPad.Project = {
-  VERSION: 2,
-  DEFAULT_PART_STEPS: 32,          // 2 bars of 16th notes
-  PART_LENGTHS: [16, 32, 64],      // 1, 2, 4 bars
-  DEFAULT_SLOTS: 8,
-  MAX_SLOTS: 64,
+  VERSION: 3,
+  BAR: 16,
+  MAX_PART_STEPS: 32 * 16,        // 32 bars
+  MAX_SONG_STEPS: 999 * 16,
 
   uid(prefix) {
     return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -37,10 +42,9 @@ SoundPad.Project = {
       version: this.VERSION,
       name,
       bpm: 120,
-      partSteps: this.DEFAULT_PART_STEPS,
       tracks: [],
       parts: [],
-      timeline: { slots: this.DEFAULT_SLOTS, cells: {}, loop: null },
+      timeline: { clips: [], loop: null },
     };
     this.addTrack(p, "drums", "Drums");
     this.addTrack(p, "bass", "Bass");
@@ -62,7 +66,6 @@ SoundPad.Project = {
       currentPartId: null,
     };
     p.tracks.push(track);
-    p.timeline.cells[track.id] = new Array(p.timeline.slots).fill(null);
     this.addPart(p, track.id);
     return track;
   },
@@ -108,6 +111,7 @@ SoundPad.Project = {
       id: this.uid("prt"),
       trackId,
       name: name || this._uniqueName(p, trackId, track.name, true),
+      minLength: 0,
       notes: [],
     };
     p.parts.push(part);
@@ -123,6 +127,7 @@ SoundPad.Project = {
       id: this.uid("prt"),
       trackId: src.trackId,
       name: this._uniqueName(p, src.trackId, `${src.name} copy`, false),
+      minLength: src.minLength || 0,
       notes: src.notes.map((n) => ({ ...n })),
     };
     p.parts.splice(p.parts.indexOf(src) + 1, 0, copy);
@@ -137,8 +142,8 @@ SoundPad.Project = {
   },
 
   /**
-   * Delete a part. A track always keeps at least one part, so deleting the
-   * last one is refused (returns false). Timeline cells using it are emptied.
+   * Delete a part and every clip that uses it. A track always keeps at
+   * least one part, so deleting the last one is refused (returns false).
    */
   deletePart(p, partId) {
     const part = this.part(p, partId);
@@ -148,8 +153,7 @@ SoundPad.Project = {
 
     const idx = siblings.indexOf(part);
     p.parts.splice(p.parts.indexOf(part), 1);
-    const row = p.timeline.cells[part.trackId] || [];
-    row.forEach((id, i) => { if (id === partId) row[i] = null; });
+    p.timeline.clips = p.timeline.clips.filter((c) => c.partId !== partId);
 
     const track = this.track(p, part.trackId);
     if (track.currentPartId === partId) {
@@ -159,72 +163,110 @@ SoundPad.Project = {
     return true;
   },
 
-  // --- Part length (project-wide) -------------------------------------
+  // --- Part length ---------------------------------------------------
 
-  /** How many notes would be lost if parts were shortened to `steps`. */
-  notesBeyond(p, steps) {
-    return p.parts.reduce((sum, part) => sum + part.notes.filter((n) => n.step >= steps).length, 0);
+  _ceilBar(steps) {
+    return Math.ceil(steps / this.BAR) * this.BAR;
+  },
+
+  /** Step just past the last note's end (0 for an empty part). */
+  contentEnd(part) {
+    let end = 0;
+    for (const n of part.notes) end = Math.max(end, n.step + n.len);
+    return end;
+  },
+
+  /** Shortest length the part can have: its content rounded up to a bar (min 1 bar). */
+  autoLength(part) {
+    return Math.min(this.MAX_PART_STEPS, Math.max(this.BAR, this._ceilBar(this.contentEnd(part))));
+  },
+
+  /** The part's length in steps: content (rounded to bars) or its fixed minimum, whichever is longer. */
+  partLength(part) {
+    return Math.min(this.MAX_PART_STEPS, Math.max(this.autoLength(part), part.minLength || 0));
+  },
+
+  /** Is the part longer than its content on purpose? */
+  isFixedLength(part) {
+    return (part.minLength || 0) > this.autoLength(part);
   },
 
   /**
-   * Change the length of every part. Shortening drops notes past the end
-   * and trims long notes; lengthening adds silence, or repeats the existing
-   * content to fill (repeat: true).
+   * Set the length (rounded to bars). It can't be shorter than the
+   * content; setting it to the content length (or 0) means "auto".
    */
-  setPartSteps(p, steps, { repeat = false } = {}) {
-    const old = p.partSteps;
-    if (steps === old) return;
-    p.parts.forEach((part) => {
-      if (steps < old) {
-        part.notes = part.notes.filter((n) => n.step < steps);
-      } else if (repeat) {
-        const base = part.notes.map((n) => ({ ...n }));
-        for (let off = old; off < steps; off += old) {
-          base.forEach((n) => {
-            if (n.step + off < steps) part.notes.push({ ...n, step: n.step + off });
-          });
-        }
-      }
-      part.notes.forEach((n) => (n.len = Math.min(n.len, steps - n.step)));
-    });
-    p.partSteps = steps;
+  setPartLength(part, steps) {
+    const want = Math.min(this.MAX_PART_STEPS, this._ceilBar(Math.max(0, steps)));
+    part.minLength = want > this.autoLength(part) ? want : 0;
   },
 
   // --- Timeline (song) ----------------------------------------------
 
-  /** Put a part (of that track) in a slot, or null to empty it. Returns true if changed. */
-  setCell(p, trackId, slot, partId) {
-    const row = p.timeline.cells[trackId];
-    if (!row || slot < 0 || slot >= p.timeline.slots) return false;
-    const value = partId || null;
-    if (value) {
-      const part = this.part(p, value);
-      if (!part || part.trackId !== trackId) return false;
-    }
-    if (row[slot] === value) return false;
-    row[slot] = value;
-    return true;
+  clipsOf(p, trackId) {
+    return p.timeline.clips.filter((c) => c.trackId === trackId);
   },
 
-  /** Index just past the last slot that holds any part (0 for an empty song). */
+  /** How long a clip is on the timeline (its own length, or its part's). */
+  clipLength(p, clip) {
+    if (clip.length) return clip.length;
+    const part = this.part(p, clip.partId);
+    return part ? this.partLength(part) : this.BAR;
+  },
+
+  /** Place a part on its track's lane. */
+  addClip(p, partId, start, length = null) {
+    const part = this.part(p, partId);
+    if (!part) return null;
+    const clip = {
+      id: this.uid("clp"),
+      trackId: part.trackId,
+      partId,
+      start: Math.max(0, Math.round(start)),
+      length: length ? Math.max(1, Math.round(length)) : null,
+    };
+    p.timeline.clips.push(clip);
+    return clip;
+  },
+
+  removeClip(p, clip) {
+    const i = p.timeline.clips.indexOf(clip);
+    if (i !== -1) p.timeline.clips.splice(i, 1);
+  },
+
+  /** Set a clip's length; matching its part's length switches back to "follow the part". */
+  setClipLength(p, clip, steps) {
+    const part = this.part(p, clip.partId);
+    const len = Math.max(1, Math.round(steps));
+    clip.length = part && len === this.partLength(part) ? null : len;
+  },
+
+  /** The clip sounding at `step` in a lane (later-starting clips win overlaps). */
+  clipAt(p, trackId, step) {
+    let hit = null;
+    for (const c of p.timeline.clips) {
+      if (c.trackId !== trackId || c.start > step) continue;
+      if (step < c.start + this.clipLength(p, c) && (!hit || c.start >= hit.start)) hit = c;
+    }
+    return hit;
+  },
+
+  /** Step just past the end of the last clip (0 for an empty song). */
   songEnd(p) {
     let end = 0;
-    Object.values(p.timeline.cells).forEach((row) =>
-      row.forEach((id, i) => { if (id) end = Math.max(end, i + 1); })
-    );
+    for (const c of p.timeline.clips) end = Math.max(end, c.start + this.clipLength(p, c));
     return end;
   },
 
-  /** Slot range the song plays: the loop if set, else start → last used slot (min 1 slot). */
+  /** Step range the song plays: the loop if set, else 0 → song end rounded up to a bar (min 1 bar). */
   songRange(p) {
     const loop = p.timeline.loop;
     if (loop) return { start: loop.start, end: loop.end };
-    return { start: 0, end: Math.max(1, this.songEnd(p)) };
+    return { start: 0, end: Math.max(this.BAR, this._ceilBar(this.songEnd(p))) };
   },
 
   setLoop(p, start, end) {
-    const s = Math.max(0, Math.min(start, end));
-    const e = Math.min(p.timeline.slots, Math.max(start, end));
+    const s = Math.max(0, Math.round(Math.min(start, end)));
+    const e = Math.min(this.MAX_SONG_STEPS, Math.round(Math.max(start, end)));
     p.timeline.loop = e > s ? { start: s, end: e } : null;
   },
 
@@ -232,53 +274,8 @@ SoundPad.Project = {
     p.timeline.loop = null;
   },
 
-  /** Insert `n` empty slots before index `at`. */
-  insertSlots(p, at, n = 1) {
-    const tl = p.timeline;
-    n = Math.min(n, this.MAX_SLOTS - tl.slots);
-    if (n <= 0) return false;
-    at = Math.max(0, Math.min(at, tl.slots));
-    Object.values(tl.cells).forEach((row) => row.splice(at, 0, ...new Array(n).fill(null)));
-    tl.slots += n;
-    if (tl.loop) {
-      if (at <= tl.loop.start) { tl.loop.start += n; tl.loop.end += n; }
-      else if (at < tl.loop.end) tl.loop.end += n;
-    }
-    return true;
-  },
-
-  addSlot(p) {
-    return this.insertSlots(p, p.timeline.slots, 1);
-  },
-
-  /** Remove slots [start, end). At least one slot always remains. */
-  deleteSlots(p, start, end) {
-    const tl = p.timeline;
-    const n = end - start;
-    if (n <= 0 || tl.slots - n < 1) return false;
-    Object.values(tl.cells).forEach((row) => row.splice(start, n));
-    tl.slots -= n;
-    tl.loop = null;
-    return true;
-  },
-
-  /**
-   * Copy slots [start, end) and insert the copy right after them.
-   * The loop/selection moves onto the copy, so pressing it again keeps
-   * extending the song (verse, verse, verse…).
-   */
-  duplicateSlots(p, start, end) {
-    const tl = p.timeline;
-    const n = end - start;
-    if (n <= 0 || tl.slots + n > this.MAX_SLOTS) return false;
-    Object.values(tl.cells).forEach((row) => row.splice(end, 0, ...row.slice(start, end)));
-    tl.slots += n;
-    tl.loop = { start: end, end: end + n };
-    return true;
-  },
-
   clearTimeline(p) {
-    Object.values(p.timeline.cells).forEach((row) => row.fill(null));
+    p.timeline.clips = [];
     p.timeline.loop = null;
   },
 
@@ -342,30 +339,23 @@ SoundPad.Project = {
   },
 
   _normalize(p) {
+    const MAX = this.MAX_PART_STEPS;
     p.version = this.VERSION;
     p.name = p.name || "";
     p.bpm = p.bpm || 120;
-    p.partSteps = this.PART_LENGTHS.includes(p.partSteps) ? p.partSteps : this.DEFAULT_PART_STEPS;
     p.tracks = Array.isArray(p.tracks) ? p.tracks : [];
     p.parts = Array.isArray(p.parts) ? p.parts : [];
-    p.timeline = p.timeline || {};
-    p.timeline.slots = Math.max(1, Math.min(this.MAX_SLOTS, p.timeline.slots || this.DEFAULT_SLOTS));
-    p.timeline.cells = p.timeline.cells || {};
-    const loop = p.timeline.loop;
-    p.timeline.loop =
-      loop && loop.start >= 0 && loop.end <= p.timeline.slots && loop.end > loop.start
-        ? { start: loop.start, end: loop.end }
-        : null;
 
     p.parts.forEach((part) => {
       part.notes = (part.notes || [])
-        .filter((n) => n.step >= 0 && n.step < p.partSteps)
+        .filter((n) => n.step >= 0 && n.step < MAX)
         .map((n) => ({
           step: n.step,
-          len: Math.max(1, Math.min(n.len || 1, p.partSteps - n.step)),
+          len: Math.max(1, Math.min(n.len || 1, MAX - n.step)),
           key: n.key,
           vel: n.vel ?? SoundPad.DEFAULT_VEL,
         }));
+      part.minLength = Math.min(MAX, this._ceilBar(Math.max(0, part.minLength || 0)));
     });
 
     p.tracks.forEach((t) => {
@@ -373,19 +363,40 @@ SoundPad.Project = {
       t.pan = t.pan ?? 0;
       t.mute = !!t.mute;
       t.solo = !!t.solo;
-      if (!this.part(p, t.currentPartId)) {
-        const first = this.partsOf(p, t.id)[0];
-        if (first) t.currentPartId = first.id;
-        else this.addPart(p, t.id);
-      }
-      const row = p.timeline.cells[t.id] || [];
-      p.timeline.cells[t.id] = Array.from({ length: p.timeline.slots }, (_, i) => row[i] ?? null);
     });
+
+    // Timeline: keep only clips whose part exists on the same track.
+    const tl = p.timeline && Array.isArray(p.timeline.clips) ? p.timeline : { clips: [], loop: p.timeline?.loop };
+    p.timeline = tl;
+    tl.clips = tl.clips
+      .filter((c) => {
+        const part = this.part(p, c.partId);
+        return part && part.trackId === c.trackId && this.track(p, c.trackId) && c.start >= 0;
+      })
+      .map((c) => ({
+        id: c.id || this.uid("clp"),
+        trackId: c.trackId,
+        partId: c.partId,
+        start: Math.round(c.start),
+        length: c.length ? Math.max(1, Math.round(c.length)) : null,
+      }));
+    const loop = tl.loop;
+    tl.loop = loop && loop.start >= 0 && loop.end > loop.start ? { start: loop.start, end: loop.end } : null;
+    delete tl.slots;
+    delete tl.cells;
+    delete p.partSteps;
 
     if (!p.tracks.length) {
       this.addTrack(p, "drums", "Drums");
       this.addTrack(p, "bass", "Bass");
     }
+    p.tracks.forEach((t) => {
+      if (!this.part(p, t.currentPartId)) {
+        const first = this.partsOf(p, t.id)[0];
+        if (first) t.currentPartId = first.id;
+        else this.addPart(p, t.id);
+      }
+    });
     return p;
   },
 };

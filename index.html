@@ -26,21 +26,12 @@
         <button data-mode="pattern" class="on">Pattern</button>
         <button data-mode="song">Song</button>
       </div>
-      <span class="position" id="position">Bar 1 · 1</span>
+      <span class="position" id="position">Pattern · Bar 1 · 1</span>
 
       <label class="ctrl">
         <span>Tempo</span>
         <input id="bpm" type="number" min="40" max="240" value="120" />
         <em>BPM</em>
-      </label>
-
-      <label class="ctrl" title="Every part in the project has this length, so parts line up on the timeline">
-        <span>Part length</span>
-        <select id="partLen">
-          <option value="16">1 bar</option>
-          <option value="32" selected>2 bars</option>
-          <option value="64">4 bars</option>
-        </select>
       </label>
 
       <label class="ctrl slider">
@@ -95,6 +86,7 @@
   <script src="js/project.js"></script>
   <script src="js/player.js"></script>
   <script src="js/velocity-lane.js"></script>
+  <script src="js/length-ruler.js"></script>
   <script src="js/drum-view.js"></script>
   <script src="js/piano-roll.js"></script>
   <script src="js/song-view.js"></script>

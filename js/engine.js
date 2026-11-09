@@ -104,11 +104,12 @@ SoundPad.Engine = class Engine {
   /**
    * Snap a real-time moment (e.g. a live pad hit) to the nearest step index
    * within the loop. Used so recorded hits land cleanly on the grid.
-   * Tempo changes mid-play shift this slightly; fine for live recording.
+   * Counts back from the next step the scheduler will play, so it stays
+   * right even if the tempo or the loop length changed while playing.
    */
   quantizeToStep(atTime) {
-    const pos = (atTime - this.startTime) / this.secondsPerStep();
-    let step = Math.round(pos) % this.loopSteps;
+    const back = Math.round((this.nextNoteTime - atTime) / this.secondsPerStep());
+    let step = (this.currentStep - back) % this.loopSteps;
     if (step < 0) step += this.loopSteps;
     return step;
   }

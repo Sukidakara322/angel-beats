@@ -1,8 +1,9 @@
 /* ------------------------------------------------------------------
  * Sound Pad — Drum view (editor for a drum track)
- * Pads + step grid + a velocity lane for the selected drum row.
- * It edits the track's current part (sparse notes in the project) —
- * it doesn't own any pattern data itself.
+ * Pads + a step grid that is as long as the part plus one bar of room
+ * to grow (hits placed there extend the part), a length ruler on top
+ * and a velocity lane for the selected drum row underneath.
+ * It edits the track's current part — it owns no pattern data itself.
  *
  * Shared editor interface used by app.js:
  *   build(), refresh(), playLive(key), handleKey(key),
@@ -17,9 +18,9 @@ SoundPad.DrumView = class DrumView {
     this.project = project;
     this.track = track;
     this.kit = instrument;
-    this.STEPS = project.partSteps;
     this.recordArmed = false;
 
+    this.STEPS = 0;        // visible columns = part length + 1 bar
     this.cellEls = {};     // drumId -> [cell, ...]
     this.labelEls = {};    // drumId -> row label
     this.columns = [];     // step -> [cell, ...]  (for fast playhead updates)
@@ -41,42 +42,51 @@ SoundPad.DrumView = class DrumView {
       <section class="sequencer">
         <div class="seq-head">
           <h2 data-role="title"></h2>
-          <div class="beat-numbers" data-role="beats"></div>
+          <span class="seq-hint">Hits in the shaded bar extend the part · drag the ▼ marker to set its length · double-click the ruler for auto length</span>
         </div>
-        <div class="seq-grid" data-role="grid"></div>
-        <div class="vel-head">Velocity — <b data-role="velName"></b> <span>click a row name to pick the drum · drag to set</span></div>
-        <div class="drum-vel-row"><div class="seq-label"></div><canvas class="vel-lane" data-role="vel"></canvas></div>
+        <div class="drum-scroll" data-role="scroll">
+          <div class="drum-inner">
+            <div class="drum-strip"><div class="seq-label"></div><canvas class="len-ruler" data-role="ruler"></canvas></div>
+            <div class="seq-grid" data-role="grid"></div>
+            <div class="drum-strip vel-strip">
+              <div class="seq-label vel-label">Velocity<b data-role="velName"></b></div>
+              <canvas class="vel-lane" data-role="vel"></canvas>
+            </div>
+          </div>
+        </div>
       </section>`;
     const q = (r) => this.root.querySelector(`[data-role="${r}"]`);
     this.padsEl = q("pads");
-    this.beatsEl = q("beats");
     this.gridEl = q("grid");
     this.titleEl = q("title");
     this.velNameEl = q("velName");
     this.velCanvas = q("vel");
+    this.rulerCanvas = q("ruler");
     this._buildPads();
-    this._buildBeats();
-    this._buildGrid();
 
+    const rect = (canvas, row) => (s) => {
+      const cell = this.cellEls[row()][s];
+      const cr = cell.getBoundingClientRect();
+      return { x: cr.left - canvas.getBoundingClientRect().left, w: cr.width };
+    };
     this.vel = new SoundPad.VelocityLane(this.velCanvas, {
-      steps: this.STEPS,
+      steps: () => this.STEPS,
       getNotes: () => this.part.notes.filter((n) => n.key === this.selected),
-      columnRect: (s) => this._columnRect(s),
+      columnRect: rect(this.velCanvas, () => this.selected),
       onChange: () => this._paintRow(this.selected),
     });
-    this._ro = new ResizeObserver(() => this.vel.resize(this.velCanvas.parentElement.clientWidth - 90));
+    this.ruler = new SoundPad.LengthRuler(this.rulerCanvas, {
+      steps: () => this.STEPS,
+      columnRect: rect(this.rulerCanvas, () => this.kit.drums[0].id),
+      getPart: () => this.part,
+      onChange: () => this.refresh(),
+    });
+
+    this._ro = new ResizeObserver(() => this._resizeStrips());
     this._ro.observe(this.gridEl);
 
-    this.selectRow(this.selected);
     this.refresh();
-  }
-
-  /** Column position of a step, relative to the velocity canvas (matches the cells above). */
-  _columnRect(step) {
-    const cell = this.cellEls[this.selected][step];
-    const cr = cell.getBoundingClientRect();
-    const lr = this.velCanvas.getBoundingClientRect();
-    return { x: cr.left - lr.left, w: cr.width };
+    this.selectRow(this.selected);
   }
 
   _buildPads() {
@@ -90,16 +100,14 @@ SoundPad.DrumView = class DrumView {
     });
   }
 
-  _buildBeats() {
-    for (let i = 0; i < this.STEPS; i++) {
-      const s = document.createElement("span");
-      s.textContent = i % 4 === 0 ? String(i / 4 + 1) : "";
-      this.beatsEl.appendChild(s);
-    }
-  }
-
+  /** (Re)build the grid rows for the current number of visible steps. */
   _buildGrid() {
-    for (let i = 0; i < this.STEPS; i++) this.columns.push([]);
+    this.gridEl.innerHTML = "";
+    this.cellEls = {};
+    this.labelEls = {};
+    this.columns = Array.from({ length: this.STEPS }, () => []);
+    this.lastCol = -1;
+    this.root.style.setProperty("--steps", this.STEPS);
 
     this.kit.drums.forEach((d) => {
       this.cellEls[d.id] = [];
@@ -107,7 +115,7 @@ SoundPad.DrumView = class DrumView {
       row.className = "seq-row";
 
       const label = document.createElement("div");
-      label.className = "seq-label selectable";
+      label.className = "seq-label selectable" + (d.id === this.selected ? " selected" : "");
       label.textContent = d.name;
       label.title = "Show this drum in the velocity lane";
       label.addEventListener("click", () => this.selectRow(d.id));
@@ -120,7 +128,7 @@ SoundPad.DrumView = class DrumView {
         const cell = document.createElement("div");
         let cls = "cell";
         if (i % 4 === 0) cls += " beat";
-        if (i % 8 === 0 && i !== 0) cls += " bar";
+        if (i % 16 === 0 && i !== 0) cls += " bar";
         cell.className = cls;
         cell.addEventListener("mousedown", (e) => {
           e.preventDefault();
@@ -140,17 +148,36 @@ SoundPad.DrumView = class DrumView {
     });
   }
 
-  /** Edit the part and mirror it in the grid. */
+  _resizeStrips() {
+    const firstCells = this.gridEl.querySelector(".seq-cells");
+    if (!firstCells || !firstCells.offsetWidth) return; // hidden tab
+    this.ruler.resize(firstCells.offsetWidth);
+    this.vel.resize(firstCells.offsetWidth);
+  }
+
+  /** Edit the part and mirror it in the grid (the grid grows/shrinks with the part). */
   _setCell(id, step, on) {
     if (!SoundPad.Project.setNote(this.part, step, id, on)) return;
+    if (this._wantedSteps() !== this.STEPS) { this.refresh(); return; }
     this._paintRow(id);
+    this.ruler.draw();
     if (id === this.selected) this.vel.draw();
   }
 
-  /** Redraw one drum row from the part (on/off + velocity shading). */
+  _wantedSteps() {
+    const P = SoundPad.Project;
+    return Math.min(P.MAX_PART_STEPS, P.partLength(this.part) + P.BAR);
+  }
+
+  /** Redraw one drum row from the part (on/off + velocity shading + past-the-end shading). */
   _paintRow(id) {
     const row = this.cellEls[id];
-    row.forEach((c) => { c.classList.remove("on"); c.style.removeProperty("--vel"); });
+    const len = SoundPad.Project.partLength(this.part);
+    row.forEach((c, i) => {
+      c.classList.remove("on");
+      c.style.removeProperty("--vel");
+      c.classList.toggle("beyond", i >= len);
+    });
     this.part.notes.forEach((n) => {
       if (n.key !== id || !row[n.step]) return;
       row[n.step].classList.add("on");
@@ -167,10 +194,20 @@ SoundPad.DrumView = class DrumView {
 
   // --- Editor interface ---------------------------------------------
 
-  /** Redraw the grid from the current part's notes. */
+  /** Redraw everything from the current part (rebuilding the grid if its length changed). */
   refresh() {
-    this.titleEl.textContent = `${this.track.name} — ${this.part.name}`;
+    const P = SoundPad.Project;
+    const part = this.part;
+    const bars = P.partLength(part) / P.BAR;
+    this.titleEl.textContent = `${this.track.name} — ${part.name} · ${bars} bar${bars === 1 ? "" : "s"}`;
+    const wanted = this._wantedSteps();
+    if (wanted !== this.STEPS) {
+      this.STEPS = wanted;
+      this._buildGrid();
+    }
     this.kit.drums.forEach((d) => this._paintRow(d.id));
+    this._resizeStrips();
+    this.ruler.draw();
     this.vel.draw();
   }
 
@@ -180,7 +217,7 @@ SoundPad.DrumView = class DrumView {
     this.kit.trigger(id, now, 0);
     this._flashPad(id);
     if (this.recordArmed && this.engine.isPlaying) {
-      const step = this.engine.quantizeToStep(now) % this.STEPS;
+      const step = this.engine.quantizeToStep(now) % SoundPad.Project.partLength(this.part);
       this._setCell(id, step, true);
     }
   }

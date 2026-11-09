@@ -7,16 +7,17 @@
  * The owning editor tells the lane where its columns are, so the bars
  * line up with any grid layout:
  *   new VelocityLane(canvas, {
- *     steps, getNotes(), columnRect(step) -> {x, w}, onChange()
+ *     steps (number or () => number), getNotes(), columnRect(step) -> {x, w}, onChange()
  *   })
  * ------------------------------------------------------------------ */
 window.SoundPad = window.SoundPad || {};
 
 SoundPad.VelocityLane = class VelocityLane {
-  constructor(canvas, { steps, getNotes, columnRect, onChange }) {
+  constructor(canvas, { steps, getNotes, columnRect, onChange, clipLeft = 0 }) {
     this.canvas = canvas;
+    this.clipLeft = clipLeft;   // don't draw left of this x (e.g. piano-roll key labels)
     this.g = canvas.getContext("2d");
-    this.steps = steps;
+    this._steps = steps;          // number, or a function (grids that grow)
     this.getNotes = getNotes;
     this.columnRect = columnRect;
     this.onChange = onChange || (() => {});
@@ -37,6 +38,10 @@ SoundPad.VelocityLane = class VelocityLane {
     canvas.addEventListener("pointercancel", end);
   }
 
+  get steps() {
+    return typeof this._steps === "function" ? this._steps() : this._steps;
+  }
+
   resize(width) {
     if (!width) return;
     const dpr = window.devicePixelRatio || 1;
@@ -55,7 +60,15 @@ SoundPad.VelocityLane = class VelocityLane {
     const H = this.H, PAD = this.PAD;
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     g.clearRect(0, 0, this.W, H);
+    g.save();
+    g.beginPath();
+    g.rect(this.clipLeft, 0, this.W - this.clipLeft, H);
+    g.clip();
+    this._drawInner(g, H, PAD);
+    g.restore();
+  }
 
+  _drawInner(g, H, PAD) {
     const first = this.columnRect(0);
     const last = this.columnRect(this.steps - 1);
     if (!first || !last) return;
@@ -96,6 +109,7 @@ SoundPad.VelocityLane = class VelocityLane {
   _apply(e) {
     const r = this.canvas.getBoundingClientRect();
     const x = e.clientX - r.left, y = e.clientY - r.top;
+    if (x < this.clipLeft) return;
     // Nearest column (so dragging across gaps between cells still works).
     let step = -1, best = Infinity;
     for (let s = 0; s < this.steps; s++) {

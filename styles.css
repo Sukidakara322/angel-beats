@@ -117,10 +117,14 @@ html, body {
   max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .chip:hover { border-color: #45505f; }
-.chip { border-left: 4px solid var(--c, var(--line)); }
+.chip::before {
+  content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 7px;
+  border-radius: 50%; background: var(--c, var(--line)); vertical-align: 1px;
+}
+.chip.active::before { background: #0e1116; opacity: 0.5; }
 .chip.active { background: var(--c, var(--step-on)); color: #0e1116; border-color: var(--c, var(--step-on)); font-weight: 600; }
 .partbar.hidden, #songView.hidden, #views.hidden { display: none; }
-.tl-scroll, .roll-scroll { scrollbar-color: #39424f transparent; }
+.roll-scroll { scrollbar-color: #39424f transparent; }
 
 /* ---------- Mode toggle + position ---------- */
 .mode-toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
@@ -148,36 +152,35 @@ html, body {
 .song-tools { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
 .song-hint { margin: 10px 0 12px; font-size: 12px; color: var(--muted); }
 
-.tl-scroll { overflow-x: auto; padding-bottom: 4px; }
-.tl-body { position: relative; display: flex; flex-direction: column; gap: 6px; min-width: max-content; }
-.tl-row { display: flex; gap: 6px; }
-.tl-label {
-  position: sticky; left: 0; z-index: 2;
-  width: 180px; flex-shrink: 0;
-  background: var(--panel);
+.mini-ctrl { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.mini-ctrl select {
+  padding: 6px 8px; background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 6px; font-size: 13px; cursor: pointer;
 }
-.tl-cells {
-  display: grid; grid-template-columns: repeat(var(--slots), minmax(96px, 1fr));
-  gap: 6px; flex: 1; min-width: calc(var(--slots) * 102px);
-  user-select: none;
+.zoom { display: flex; gap: 4px; }
+.zoom .tbtn { min-width: 32px; }
+
+/* Timeline: DOM lane headers on the left, one canvas for ruler + lanes. */
+.tl-wrap { display: flex; gap: 8px; align-items: flex-start; }
+.tl-heads { width: 180px; flex-shrink: 0; }
+.tl-main { flex: 1; min-width: 0; }
+.tl-canvas { display: block; touch-action: none; border-radius: 8px; }
+.tl-head-spacer {
+  box-sizing: border-box; display: flex; align-items: center; padding-left: 4px;
+  font-size: 12px; color: var(--muted);
 }
 
-/* Ruler */
-.tl-ruler-title { display: block; padding: 8px 4px; font-size: 12px; color: var(--muted); }
-.tl-slot {
-  padding: 5px 8px; border-radius: 6px; cursor: pointer;
-  background: var(--panel-2); border: 1px solid var(--line);
-  display: flex; align-items: baseline; gap: 6px;
-}
-.tl-slot b { font-size: 13px; }
-.tl-slot span { font-size: 11px; color: var(--muted); }
-.tl-slot:hover { border-color: #45505f; }
-.tl-slot.unplayed { opacity: 0.45; }
-.tl-slot.in-loop { background: #1d3550; border-color: var(--playhead); }
-.tl-slot.now b { color: var(--playhead); }
+/* Shared horizontal scrollbar strip (timeline + piano roll). */
+.hbar { overflow-x: auto; overflow-y: hidden; height: 14px; scrollbar-color: #39424f transparent; }
+.hbar > div { height: 1px; }
+.hbar.idle { visibility: hidden; }
 
 /* Lanes */
-.tl-lane-head { padding: 6px 8px; height: 100%; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); }
+.tl-lane-head {
+  box-sizing: border-box; padding: 6px 8px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2);
+}
+.tl-lane-head.silent { opacity: 0.55; }
 .tl-track-name { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
 .tl-lane-ctrls { display: flex; gap: 4px; }
 .tl-pick {
@@ -191,35 +194,6 @@ html, body {
 }
 .ms.mute.on { background: var(--accent); color: #fff; border-color: var(--accent); }
 .ms.solo.on { background: #e6d35a; color: #0e1116; border-color: #e6d35a; }
-.tl-lane.silent .tl-cells { opacity: 0.35; }
-
-.tl-cell {
-  position: relative; height: 62px; border-radius: 8px; cursor: pointer;
-  background: #141920; border: 1px dashed #2a323d;
-}
-.tl-cell:hover { border-color: #45505f; }
-.tl-cell.filled {
-  border: 1px solid var(--c);
-  background: color-mix(in srgb, var(--c) 22%, #141920);
-}
-.tl-part-name {
-  position: absolute; top: 5px; left: 8px; right: 26px;
-  font-size: 12px; font-weight: 600; color: var(--c);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.tl-edit {
-  position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; padding: 0;
-  font-size: 12px; line-height: 18px; cursor: pointer;
-  background: transparent; color: var(--muted); border: 1px solid transparent; border-radius: 4px;
-}
-.tl-edit:hover { color: var(--text); border-color: var(--c); }
-.tl-preview { position: absolute; left: 8px; right: 8px; bottom: 6px; width: calc(100% - 16px); height: 26px; opacity: 0.75; }
-
-.tl-playhead {
-  display: none; position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px;
-  background: var(--playhead); box-shadow: 0 0 8px var(--playhead);
-  pointer-events: none; z-index: 1;
-}
 .hint { margin-left: auto; font-size: 12px; color: var(--muted); max-width: 320px; }
 
 /* ---------- Instrument views ---------- */
@@ -287,17 +261,24 @@ html, body {
 .seq-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 10px; }
 .seq-head h2 { margin: 0; font-size: 15px; font-weight: 600; white-space: nowrap; }
 .seq-hint { font-size: 12px; color: var(--muted); }
-.beat-numbers { display: grid; grid-template-columns: repeat(var(--steps), 1fr); gap: 4px; flex: 1; margin-left: 90px; }
-.beat-numbers span { text-align: center; font-size: 11px; color: var(--muted); }
+/* Drum grid: grows with the part, scrolls sideways, row names stay pinned. */
+.drum-scroll { overflow-x: auto; scrollbar-color: #39424f transparent; padding-bottom: 4px; }
+.drum-inner { width: max(100%, calc(90px + var(--steps, 32) * 19px)); }
+.drum-strip { display: flex; gap: 6px; margin-bottom: 6px; }
+.vel-strip { margin: 10px 0 0; align-items: center; }
+.vel-label { display: flex; flex-direction: column; font-size: 11px; line-height: 1.3; }
+.vel-label b { color: var(--step-on); }
+.drum-scroll .seq-label { position: sticky; left: 0; z-index: 2; background: var(--panel); }
+.len-ruler { display: block; border-radius: 4px; touch-action: none; }
 
-.seq-grid { display: flex; flex-direction: column; gap: 5px; }
+.seq-grid { display: flex; flex-direction: column; gap: 4px; }
 .seq-row { display: flex; align-items: center; gap: 6px; }
 .seq-label {
   width: 84px; flex-shrink: 0; font-size: 13px; color: var(--muted);
   text-align: right; padding-right: 6px;
 }
 .seq-cells {
-  display: grid; grid-template-columns: repeat(var(--steps), 1fr); gap: 4px; flex: 1;
+  display: grid; grid-template-columns: repeat(var(--steps), minmax(16px, 1fr)); gap: 3px; flex: 1;
   user-select: none;           /* no text selection while dragging to paint */
 }
 .cell {
@@ -310,7 +291,8 @@ html, body {
   transition: background 0.08s, box-shadow 0.08s;
 }
 .cell.beat { background: #232b36; }          /* first step of each beat, slightly lighter */
-.cell.bar { border-left: 2px solid #39424f; }  /* start of each bar (every 8 steps) */
+.cell.bar { border-left: 2px solid #4a5462; }  /* start of each bar (every 16 steps) */
+.cell.beyond:not(.on) { background: #12161c; border-color: #1f252e; } /* room-to-grow bar */
 
 .cell.on { background: var(--step-on); border-color: var(--step-on); }
 /* Brightness follows velocity (--vel set per cell by DrumView). */
@@ -334,7 +316,7 @@ html, body {
 .vel-head b { color: var(--step-on); }
 .vel-head span { margin-left: 8px; opacity: 0.8; }
 .vel-lane { display: block; border-radius: 6px; cursor: ns-resize; touch-action: none; }
-.drum-vel-row { display: flex; gap: 6px; }
+.sequencer > .len-ruler { margin-bottom: 4px; }
 
 /* ---------- Library ---------- */
 .library {

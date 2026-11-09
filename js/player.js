@@ -1,14 +1,15 @@
 /* ------------------------------------------------------------------
  * Sound Pad — Player
  * Turns transport steps into notes. The engine only counts steps; the
- * player decides which part each track plays at that moment.
+ * player decides what each track plays at that moment.
  *
  * Modes:
- *   "pattern" — every track loops its current (open-in-editor) part.
- *   "song"    — tracks play the part in the timeline slot under the
- *               playhead: slot = floor(songStep / partSteps). The song
- *               loops over the loop range, or over slots up to the last
- *               one that holds any part.
+ *   "pattern" — every track loops its current (open-in-editor) part at
+ *               the part's own length; the transport loops over the
+ *               longest of them.
+ *   "song"    — each track plays the clip under the playhead on its lane
+ *               (repeating the part if the clip is longer than it). The
+ *               song loops over the loop region, or 0 → song end.
  * ------------------------------------------------------------------ */
 window.SoundPad = window.SoundPad || {};
 
@@ -34,60 +35,70 @@ SoundPad.Player = class Player {
   /** How many steps the transport loops over in the current mode. */
   loopLength() {
     const p = this.project;
-    if (!p) return 32;
+    const P = SoundPad.Project;
+    if (!p) return P.BAR;
     if (this.mode === "song") {
-      const r = SoundPad.Project.songRange(p);
-      return (r.end - r.start) * p.partSteps;
+      const r = P.songRange(p);
+      return r.end - r.start;
     }
-    return p.partSteps;
+    let len = P.BAR;
+    for (const t of p.tracks) {
+      const part = P.currentPart(p, t);
+      if (part) len = Math.max(len, P.partLength(part));
+    }
+    return len;
   }
 
-  /** Keep the engine's loop length in step with the mode / timeline. */
+  /** Keep the engine's loop length in step with the mode / content. */
   sync() {
     const len = this.loopLength();
     if (this.engine.loopSteps !== len) this.engine.setLoopSteps(len);
   }
 
   /**
-   * Called by the engine for every 16th-note step.
-   * Returns { slot, local } for the playhead (slot is -1 in pattern mode).
+   * Called by the engine for every 16th-note step. Returns, for the UI:
+   *   { step, songStep, locals: { trackId: step inside its open part, or -1 } }
+   * songStep is -1 in pattern mode.
    */
   onStep(step, time) {
     const p = this.project;
     if (!p) return null;
     const P = SoundPad.Project;
 
-    // Timeline edits while playing can change the loop length: self-correct.
+    // Edits while playing can change the loop length: self-correct.
     const len = this.loopLength();
     if (this.engine.loopSteps !== len) {
       this.engine.setLoopSteps(len);
       step %= len;
     }
 
-    let slot = -1;
-    let local = step % p.partSteps;
-    if (this.mode === "song") {
-      const songStep = P.songRange(p).start * p.partSteps + step;
-      slot = Math.floor(songStep / p.partSteps);
-      local = songStep % p.partSteps;
-    }
-
+    const song = this.mode === "song";
+    const songStep = song ? P.songRange(p).start + step : -1;
     const sps = this.engine.secondsPerStep();
     const anySolo = p.tracks.some((t) => t.solo);
+    const locals = {};
 
     for (const { track, instrument } of this.tracks) {
-      if (track.mute || (anySolo && !track.solo)) continue;
-      const part = slot >= 0
-        ? P.part(p, p.timeline.cells[track.id][slot])
-        : P.currentPart(p, track);
-      if (!part) continue;
+      let part = null, local = -1;
+      if (song) {
+        const clip = P.clipAt(p, track.id, songStep);
+        if (clip) {
+          part = P.part(p, clip.partId);
+          local = (songStep - clip.start) % P.partLength(part);
+        }
+      } else {
+        part = P.currentPart(p, track);
+        if (part) local = step % P.partLength(part);
+      }
+      locals[track.id] = part && part.id === track.currentPartId ? local : -1;
+
+      if (!part || track.mute || (anySolo && !track.solo)) continue;
       for (const n of part.notes) {
         if (n.step !== local) continue;
         // Gate slightly short of the full length so repeated notes re-articulate.
-        const dur = n.len * sps - sps * 0.05;
-        instrument.trigger(n.key, time, dur, n.vel);
+        instrument.trigger(n.key, time, n.len * sps - sps * 0.05, n.vel);
       }
     }
-    return { slot, local };
+    return { step, songStep, locals };
   }
 };
