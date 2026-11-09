@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sound Pad — Drums</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">🥁 Sound&nbsp;Pad</div>
+    <nav class="instruments" id="instruments">
+      <button class="inst active" data-inst="drums">Drums</button>
+      <button class="inst" data-inst="bass">Bass</button>
+      <button class="inst" disabled title="Coming later">Keys</button>
+      <button class="inst" disabled title="Coming later">Song</button>
+    </nav>
+  </header>
+
+  <main class="stage" id="stage">
+    <!-- Transport -->
+    <section class="transport">
+      <button id="playBtn" class="tbtn play" title="Play / Stop (Space)">▶</button>
+      <button id="recBtn" class="tbtn rec" title="Arm recording (R)">● REC</button>
+      <button id="clearBtn" class="tbtn" title="Clear pattern">Clear</button>
+
+      <label class="ctrl">
+        <span>Tempo</span>
+        <input id="bpm" type="number" min="40" max="240" value="120" />
+        <em>BPM</em>
+      </label>
+
+      <label class="ctrl slider">
+        <span>Volume</span>
+        <input id="volume" type="range" min="0" max="1" step="0.01" value="0.9" />
+      </label>
+
+      <span class="hint" id="statusHint">Press ▶ or Space to start · Arm REC then hit pads to record</span>
+    </section>
+
+    <!-- Instrument editors (one is visible at a time; both play together) -->
+    <div class="inst-view" id="drumsView"><!-- built by DrumView --></div>
+    <div class="inst-view hidden" id="bassView"><!-- built by BassView --></div>
+
+    <!-- Saved sequences -->
+    <section class="library">
+      <div class="lib-head">
+        <h2>Saved Sequences</h2>
+        <div class="save-row">
+          <input id="seqName" type="text" placeholder="Name this beat…" maxlength="40" />
+          <button id="saveBtn" class="tbtn save">💾 Save</button>
+        </div>
+      </div>
+      <p class="store-note" id="storeNote"><!-- set by app.js --></p>
+      <ul class="lib-list" id="libList"><!-- built by app.js --></ul>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>Vanilla Web Audio · no install · works offline</span>
+    <span class="kbd-help">Keys: <b>Space</b> play · <b>R</b> record · pad keys shown on each pad</span>
+  </footer>
+
+  <script src="js/engine.js"></script>
+  <script src="js/drums.js"></script>
+  <script src="js/bass.js"></script>
+  <script src="js/drum-view.js"></script>
+  <script src="js/bass-view.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
