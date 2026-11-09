@@ -1,20 +1,23 @@
 /* ------------------------------------------------------------------
  * Sound Pad — App orchestrator
- * Owns the shared transport, tempo/volume, instrument tabs, save/load,
- * and keyboard routing. Each instrument is a self-contained "view" that
- * implements the same interface; the transport plays them all together,
- * while the tabs just switch which editor is visible.
+ * Owns the current Project and wires it to audio + UI:
+ *   • for every track: a Channel (volume/pan), an Instrument (from the
+ *     registry) and an editor view, plus a tab in the top bar
+ *   • the shared transport (play / record / tempo / volume)
+ *   • save / load, keyboard routing, playhead drawing
+ * The Player decides what to play on each step; views only edit parts.
  * ------------------------------------------------------------------ */
 (function () {
+  const P = SoundPad.Project;
   const engine = new SoundPad.Engine();
+  const player = new SoundPad.Player(engine);
+  engine.onStep = (step, time) => player.onStep(step, time);
 
-  const views = {
-    drums: new SoundPad.DrumView(engine, document.getElementById("drumsView")),
-    bass: new SoundPad.BassView(engine, document.getElementById("bassView")),
-  };
-  const viewList = Object.values(views);
-  let activeInst = "drums";
+  let project = null;
+  let rts = [];               // per-track runtime: { track, channel, instrument, view, root, tab }
+  let activeTrackId = null;
   let recordArmed = false;
+  let currentSeqId = null;
 
   // DOM refs
   const playBtn = document.getElementById("playBtn");
@@ -27,13 +30,64 @@
   const saveBtn = document.getElementById("saveBtn");
   const libListEl = document.getElementById("libList");
   const storeNoteEl = document.getElementById("storeNote");
-  const instBtns = document.querySelectorAll(".inst[data-inst]");
+  const tabsEl = document.getElementById("trackTabs");
+  const viewsEl = document.getElementById("views");
 
-  let currentSeqId = null;
+  const IDLE_HINT = "Press ▶ or Space to start · Arm REC then play to record";
 
-  // --- Transport (drives every instrument together) ------------------
+  const activeRt = () => rts.find((rt) => rt.track.id === activeTrackId);
 
-  engine.onStep = (step, time) => viewList.forEach((v) => v.onStep(step, time));
+  // --- Mounting a project -------------------------------------------
+
+  /** Tear down the old project's tracks and build the new one's. */
+  function mountProject(next) {
+    // Remember which kind of track was open so a load keeps that tab.
+    const prevType = activeRt()?.track.type;
+
+    rts.forEach((rt) => {
+      rt.view.destroy();
+      rt.root.remove();
+      rt.tab.remove();
+      rt.channel.dispose();
+    });
+
+    project = next;
+    engine.setBpm(project.bpm);
+    project.bpm = engine.bpm;
+    bpmInput.value = engine.bpm;
+    document.documentElement.style.setProperty("--steps", project.partSteps);
+
+    rts = project.tracks.map((track) => {
+      const def = SoundPad.Instruments.get(track.type);
+      const channel = new SoundPad.Channel(engine);
+      channel.setVolume(track.volume);
+      channel.setPan(track.pan);
+      const instrument = def.create(engine, channel);
+
+      const root = document.createElement("div");
+      root.className = "inst-view hidden";
+      viewsEl.appendChild(root);
+      const View = SoundPad[def.editor];
+      const view = new View({ engine, root, project, track, instrument });
+      view.build();
+
+      const tab = document.createElement("button");
+      tab.className = "inst";
+      tab.textContent = track.name;
+      tab.addEventListener("click", () => setActive(track.id));
+      tabsEl.appendChild(tab);
+
+      return { track, channel, instrument, view, root, tab };
+    });
+
+    player.setProject(project, rts);
+    lastDrawnStep = -1;
+
+    const keep = rts.find((rt) => rt.track.type === prevType) || rts[0];
+    setActive(keep.track.id);
+  }
+
+  // --- Transport ----------------------------------------------------
 
   async function togglePlay() {
     await engine.init();
@@ -41,7 +95,7 @@
       engine.stop();
       playBtn.textContent = "▶";
       playBtn.classList.remove("on");
-      viewList.forEach((v) => v.clearPlayhead());
+      rts.forEach((rt) => rt.view.clearPlayhead());
       lastDrawnStep = -1;
     } else {
       engine.start();
@@ -50,48 +104,42 @@
     }
   }
 
+  function applyRecordArm() {
+    rts.forEach((rt) => (rt.view.recordArmed = recordArmed && rt.track.id === activeTrackId));
+    const rt = activeRt();
+    statusHint.textContent = recordArmed && rt
+      ? `Recording ${rt.track.name} — play the pads/keys while it loops`
+      : IDLE_HINT;
+  }
+
   function toggleRecord() {
     recordArmed = !recordArmed;
     recBtn.classList.toggle("on", recordArmed);
-    // Only the instrument you're looking at records what you play.
-    viewList.forEach((v) => (v.recordArmed = false));
-    views[activeInst].recordArmed = recordArmed;
-    statusHint.textContent = recordArmed
-      ? `Recording ${activeInst} — play the pads/keys while it loops`
-      : "Press ▶ or Space to start · Arm REC then play to record";
+    applyRecordArm();
   }
 
   function clearActive() {
-    views[activeInst].clear();
+    const rt = activeRt();
+    if (rt) rt.view.clear();
   }
 
-  // --- Instrument tabs ----------------------------------------------
+  // --- Track tabs ----------------------------------------------------
 
-  function setActive(inst) {
-    if (!views[inst]) return;
-    activeInst = inst;
-    instBtns.forEach((b) => b.classList.toggle("active", b.dataset.inst === inst));
-    Object.entries(views).forEach(([name, v]) =>
-      v.root.classList.toggle("hidden", name !== inst)
-    );
-    // Record arming follows the visible instrument.
-    viewList.forEach((v) => (v.recordArmed = false));
-    views[activeInst].recordArmed = recordArmed;
+  function setActive(trackId) {
+    activeTrackId = trackId;
+    rts.forEach((rt) => {
+      const on = rt.track.id === trackId;
+      rt.tab.classList.toggle("active", on);
+      rt.root.classList.toggle("hidden", !on);
+    });
+    applyRecordArm();   // record arming follows the visible track
   }
 
   // --- Save / load ---------------------------------------------------
 
   async function saveCurrent() {
-    const name = (seqNameInput.value || "").trim() || "Untitled beat";
-    const record = await SoundPad.Store.save({
-      name,
-      bpm: engine.bpm,
-      steps: engine.steps,
-      instruments: {
-        drums: views.drums.getPattern(),
-        bass: views.bass.getPattern(),
-      },
-    });
+    project.name = (seqNameInput.value || "").trim() || "Untitled song";
+    const record = await SoundPad.Store.save(project);
     currentSeqId = record.id;
     seqNameInput.value = record.name;
     renderLibrary();
@@ -100,17 +148,9 @@
   async function loadSequence(id) {
     const rec = await SoundPad.Store.get(id);
     if (!rec) return;
-
-    // New format uses `instruments`; fall back to the old drums-only `pattern`.
-    const inst = rec.instruments || { drums: rec.pattern || {}, bass: {} };
-    views.drums.setPattern(inst.drums || {});
-    views.bass.setPattern(inst.bass || {});
-
-    engine.setBpm(rec.bpm || engine.bpm);
-    bpmInput.value = engine.bpm;
-
+    mountProject(P.fromRecord(rec));
     currentSeqId = rec.id;
-    seqNameInput.value = rec.name;
+    seqNameInput.value = project.name;
     renderLibrary();
   }
 
@@ -127,7 +167,7 @@
     if (!list.length) {
       const empty = document.createElement("li");
       empty.className = "lib-empty";
-      empty.textContent = "No saved sequences yet — build a beat and hit Save.";
+      empty.textContent = "No saved projects yet — make something and hit Save.";
       libListEl.appendChild(empty);
       return;
     }
@@ -142,7 +182,8 @@
 
       const meta = document.createElement("span");
       meta.className = "meta";
-      meta.textContent = `${rec.bpm} BPM`;
+      const trackCount = rec.tracks ? rec.tracks.length : 2;
+      meta.textContent = `${rec.bpm} BPM · ${trackCount} tracks`;
 
       const spacer = document.createElement("span");
       spacer.className = "spacer";
@@ -173,7 +214,8 @@
       step = engine.drawQueue.shift().step;
     }
     if (step !== lastDrawnStep && engine.isPlaying) {
-      viewList.forEach((v) => v.highlightColumn(step));
+      const local = step % project.partSteps;
+      rts.forEach((rt) => rt.view.highlightColumn(local));
       lastDrawnStep = step;
     }
   }
@@ -183,13 +225,11 @@
   playBtn.addEventListener("click", togglePlay);
   recBtn.addEventListener("click", toggleRecord);
   clearBtn.addEventListener("click", clearActive);
-  instBtns.forEach((b) =>
-    b.addEventListener("click", () => { if (!b.disabled) setActive(b.dataset.inst); })
-  );
 
   bpmInput.addEventListener("change", () => {
     engine.setBpm(parseInt(bpmInput.value, 10));
     bpmInput.value = engine.bpm;
+    project.bpm = engine.bpm;
   });
   volumeInput.addEventListener("input", () => engine.setVolume(parseFloat(volumeInput.value)));
 
@@ -201,16 +241,16 @@
     const k = e.key.toLowerCase();
     if (k === " ") { e.preventDefault(); togglePlay(); return; }
     if (k === "r") { toggleRecord(); return; }
-    if (views[activeInst].handleKey(k)) e.preventDefault();
+    const rt = activeRt();
+    if (rt && rt.view.handleKey(k)) e.preventDefault();
   });
 
   // --- Init ----------------------------------------------------------
 
-  document.documentElement.style.setProperty("--steps", engine.steps);
   storeNoteEl.textContent = SoundPad.Store.backendLabel();
   storeNoteEl.classList.toggle("warn", !SoundPad.Store.useServer);
-  viewList.forEach((v) => v.build());
-  setActive("drums");
+  engine.setVolume(parseFloat(volumeInput.value));
+  mountProject(P.create());
   renderLibrary();
   drawLoop();
 })();

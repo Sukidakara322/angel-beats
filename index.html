@@ -3,17 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sound Pad — Drums</title>
+  <title>Sound Pad</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header class="topbar">
     <div class="brand">🥁 Sound&nbsp;Pad</div>
-    <nav class="instruments" id="instruments">
-      <button class="inst active" data-inst="drums">Drums</button>
-      <button class="inst" data-inst="bass">Bass</button>
-      <button class="inst" disabled title="Coming later">Keys</button>
-      <button class="inst" disabled title="Coming later">Song</button>
+    <nav class="instruments">
+      <div class="instruments" id="trackTabs"><!-- one tab per track, built by app.js --></div>
+      <button class="inst" disabled title="Coming in Phase 2">Song</button>
     </nav>
   </header>
 
@@ -38,16 +36,15 @@
       <span class="hint" id="statusHint">Press ▶ or Space to start · Arm REC then hit pads to record</span>
     </section>
 
-    <!-- Instrument editors (one is visible at a time; both play together) -->
-    <div class="inst-view" id="drumsView"><!-- built by DrumView --></div>
-    <div class="inst-view hidden" id="bassView"><!-- built by BassView --></div>
+    <!-- Track editors (one visible at a time; all tracks play together) -->
+    <div id="views"><!-- one .inst-view per track, built by app.js --></div>
 
-    <!-- Saved sequences -->
+    <!-- Saved projects -->
     <section class="library">
       <div class="lib-head">
-        <h2>Saved Sequences</h2>
+        <h2>Saved Projects</h2>
         <div class="save-row">
-          <input id="seqName" type="text" placeholder="Name this beat…" maxlength="40" />
+          <input id="seqName" type="text" placeholder="Name this song…" maxlength="40" />
           <button id="saveBtn" class="tbtn save">💾 Save</button>
         </div>
       </div>
@@ -62,8 +59,11 @@
   </footer>
 
   <script src="js/engine.js"></script>
+  <script src="js/instruments.js"></script>
   <script src="js/drums.js"></script>
   <script src="js/bass.js"></script>
+  <script src="js/project.js"></script>
+  <script src="js/player.js"></script>
   <script src="js/drum-view.js"></script>
   <script src="js/bass-view.js"></script>
   <script src="js/store.js"></script>

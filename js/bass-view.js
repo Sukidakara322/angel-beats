@@ -1,17 +1,19 @@
 /* ------------------------------------------------------------------
- * Sound Pad — Bass view
- * A pitched instrument: a one-octave playable keyboard (mouse or computer
- * keys) plus a piano-roll step sequencer (rows = notes). Shares the same
- * instrument interface as DrumView so app.js treats both the same way.
+ * Sound Pad — Bass view (editor for a pitched track)
+ * A one-octave playable keyboard (mouse or computer keys) plus a
+ * piano-roll step grid (rows = notes). Edits the track's current part;
+ * same editor interface as DrumView.
  * ------------------------------------------------------------------ */
 window.SoundPad = window.SoundPad || {};
 
 SoundPad.BassView = class BassView {
-  constructor(engine, root) {
+  constructor({ engine, root, project, track, instrument }) {
     this.engine = engine;
-    this.synth = new SoundPad.BassSynth(engine);
     this.root = root;
-    this.STEPS = engine.steps;
+    this.project = project;
+    this.track = track;
+    this.synth = instrument;
+    this.STEPS = project.partSteps;
     this.recordArmed = false;
 
     // Piano-roll range: E1 (MIDI 28) up to E3 (MIDI 52).
@@ -28,14 +30,17 @@ SoundPad.BassView = class BassView {
       ["g", 6], ["b", 7], ["h", 8], ["n", 9], ["j", 10], ["m", 11], [",", 12],
     ];
 
-    // pattern[midi] = boolean[STEPS]
-    this.pattern = {};
-    this.notes.forEach((n) => (this.pattern[n.midi] = new Array(this.STEPS).fill(false)));
-
-    this.cellEls = {};
+    this.cellEls = {};     // midi -> [cell, ...]
+    this.columns = [];     // step -> [cell, ...]
+    this.lastCol = -1;
     this.painting = false;
     this.paintValue = false;
-    document.addEventListener("mouseup", () => (this.painting = false));
+    this._onMouseUp = () => (this.painting = false);
+    document.addEventListener("mouseup", this._onMouseUp);
+  }
+
+  get part() {
+    return SoundPad.Project.currentPart(this.project, this.track);
   }
 
   build() {
@@ -48,7 +53,7 @@ SoundPad.BassView = class BassView {
       </div>
       <section class="sequencer">
         <div class="seq-head">
-          <h2>Bass Sequencer</h2>
+          <h2 data-role="title"></h2>
           <div class="beat-numbers" data-role="beats"></div>
         </div>
         <div class="seq-grid piano" data-role="grid"></div>
@@ -56,6 +61,7 @@ SoundPad.BassView = class BassView {
     this.keysEl = this.root.querySelector('[data-role="keys"]');
     this.beatsEl = this.root.querySelector('[data-role="beats"]');
     this.gridEl = this.root.querySelector('[data-role="grid"]');
+    this.titleEl = this.root.querySelector('[data-role="title"]');
     this.octLabel = this.root.querySelector('[data-role="octLabel"]');
 
     this.root.querySelector('[data-role="octDown"]').addEventListener("click", () => this.shiftOctave(-12));
@@ -65,6 +71,7 @@ SoundPad.BassView = class BassView {
     this._buildBeats();
     this._buildGrid();
     this._updateOctaveLabel();
+    this.refresh();
   }
 
   _buildKeys() {
@@ -90,6 +97,8 @@ SoundPad.BassView = class BassView {
   }
 
   _buildGrid() {
+    for (let i = 0; i < this.STEPS; i++) this.columns.push([]);
+
     this.notes.forEach((n) => {
       this.cellEls[n.midi] = [];
       const row = document.createElement("div");
@@ -111,29 +120,31 @@ SoundPad.BassView = class BassView {
         cell.addEventListener("mousedown", (e) => {
           e.preventDefault();
           this.painting = true;
-          this.paintValue = !this.pattern[n.midi][i];
+          this.paintValue = !SoundPad.Project.findNote(this.part, i, n.midi);
           this._setCell(n.midi, i, this.paintValue);
-          if (this.paintValue) this._preview(n.freq);
+          if (this.paintValue) this._preview(n.midi);
         });
         cell.addEventListener("mouseenter", () => {
           if (this.painting) this._setCell(n.midi, i, this.paintValue);
         });
         cells.appendChild(cell);
         this.cellEls[n.midi].push(cell);
+        this.columns[i].push(cell);
       }
       row.appendChild(cells);
       this.gridEl.appendChild(row);
     });
   }
 
+  /** Edit the part and mirror it in the grid. */
   _setCell(midi, step, on) {
-    this.pattern[midi][step] = on;
+    SoundPad.Project.setNote(this.part, step, midi, on);
     this.cellEls[midi][step].classList.toggle("on", on);
   }
 
-  async _preview(freq) {
+  async _preview(midi) {
     await this.engine.init();
-    this.synth.note(freq, this.engine.ctx.currentTime, 0.18);
+    this.synth.trigger(midi, this.engine.ctx.currentTime, 0.18, 1);
   }
 
   shiftOctave(delta) {
@@ -148,22 +159,26 @@ SoundPad.BassView = class BassView {
     this.octLabel.textContent = `${SoundPad.midiName(this.baseMidi)} – ${SoundPad.midiName(this.baseMidi + 12)}`;
   }
 
-  // --- Instrument interface -----------------------------------------
+  // --- Editor interface ---------------------------------------------
 
-  onStep(step, time) {
-    const dur = Math.max(0.12, this.engine.secondsPerStep() * 0.95);
-    this.notes.forEach((n) => {
-      if (this.pattern[n.midi][step]) this.synth.note(n.freq, time, dur);
+  /** Redraw the grid from the current part's notes. */
+  refresh() {
+    const part = this.part;
+    this.titleEl.textContent = `${this.track.name} — ${part.name}`;
+    Object.values(this.cellEls).forEach((row) => row.forEach((c) => c.classList.remove("on")));
+    part.notes.forEach((n) => {
+      const cell = this.cellEls[n.key] && this.cellEls[n.key][n.step];
+      if (cell) cell.classList.add("on");
     });
   }
 
   async playLive(midi) {
     await this.engine.init();
-    const freq = SoundPad.midiToFreq(midi);
-    this.synth.note(freq, this.engine.ctx.currentTime, 0.25);
+    const now = this.engine.ctx.currentTime;
+    this.synth.trigger(midi, now, 0.25, 1);
     this._flashKey(midi);
-    if (this.recordArmed && this.engine.isPlaying && this.pattern[midi]) {
-      const step = this.engine.quantizeToStep(this.engine.ctx.currentTime);
+    if (this.recordArmed && this.engine.isPlaying && this.cellEls[midi]) {
+      const step = this.engine.quantizeToStep(now) % this.STEPS;
       this._setCell(midi, step, true);
     }
   }
@@ -185,34 +200,23 @@ SoundPad.BassView = class BassView {
   }
 
   highlightColumn(step) {
-    this.notes.forEach((n) =>
-      this.cellEls[n.midi].forEach((c, i) => c.classList.toggle("playing", i === step))
-    );
+    if (step === this.lastCol) return;
+    if (this.columns[this.lastCol]) this.columns[this.lastCol].forEach((c) => c.classList.remove("playing"));
+    if (this.columns[step]) this.columns[step].forEach((c) => c.classList.add("playing"));
+    this.lastCol = step;
   }
 
   clearPlayhead() {
-    this.notes.forEach((n) =>
-      this.cellEls[n.midi].forEach((c) => c.classList.remove("playing"))
-    );
-  }
-
-  getPattern() {
-    const snap = {};
-    this.notes.forEach((n) => (snap[n.midi] = this.pattern[n.midi].slice()));
-    return snap;
-  }
-
-  setPattern(data) {
-    data = data || {};
-    this.notes.forEach((n) => {
-      const row = data[n.midi] || [];
-      for (let i = 0; i < this.STEPS; i++) this._setCell(n.midi, i, !!row[i]);
-    });
+    this.highlightColumn(-1);
   }
 
   clear() {
-    this.notes.forEach((n) => {
-      for (let i = 0; i < this.STEPS; i++) this._setCell(n.midi, i, false);
-    });
+    SoundPad.Project.clearPart(this.part);
+    this.refresh();
+  }
+
+  destroy() {
+    document.removeEventListener("mouseup", this._onMouseUp);
+    this.root.innerHTML = "";
   }
 };

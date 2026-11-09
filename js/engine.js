@@ -5,7 +5,8 @@
  * pattern) that keeps timing tight regardless of UI jank.
  *
  * It is instrument-agnostic. It just calls `onStep(stepIndex, time)` for
- * every 16th-note; the app decides what to trigger.
+ * every 16th-note, looping over `loopSteps`. The Player decides what that
+ * step means (a step inside a part, or a position in the song).
  * ------------------------------------------------------------------ */
 window.SoundPad = window.SoundPad || {};
 
@@ -17,7 +18,7 @@ SoundPad.Engine = class Engine {
 
     // Transport
     this.bpm = 120;
-    this.steps = 32;               // 16th notes in the loop (2 bars)
+    this.loopSteps = 32;           // 16th notes before the transport wraps
     this.isPlaying = false;
     this.currentStep = 0;          // next step to be scheduled
     this.nextNoteTime = 0;         // audio-clock time of that next step
@@ -38,7 +39,7 @@ SoundPad.Engine = class Engine {
     const Ctx = window.AudioContext || window.webkitAudioContext;
     this.ctx = new Ctx();
     this.master = this.ctx.createGain();
-    this.master.gain.value = 0.9;
+    this.master.gain.value = this._pendingVolume ?? 0.9;
 
     // Bus limiter: glues a fuller kit together and stops many simultaneous
     // hits from clipping harshly — part of what makes it sound "hard".
@@ -55,11 +56,17 @@ SoundPad.Engine = class Engine {
   }
 
   setVolume(v) {
+    this._pendingVolume = v;
     if (this.master) this.master.gain.value = v;
   }
 
   setBpm(bpm) {
     this.bpm = Math.min(240, Math.max(40, bpm | 0));
+  }
+
+  setLoopSteps(n) {
+    this.loopSteps = Math.max(1, n | 0);
+    this.currentStep %= this.loopSteps;
   }
 
   /** Seconds per 16th-note step at the current tempo. */
@@ -89,18 +96,19 @@ SoundPad.Engine = class Engine {
       if (this.onStep) this.onStep(this.currentStep, this.nextNoteTime);
       this.drawQueue.push({ step: this.currentStep, time: this.nextNoteTime });
       this.nextNoteTime += this.secondsPerStep();
-      this.currentStep = (this.currentStep + 1) % this.steps;
+      this.currentStep = (this.currentStep + 1) % this.loopSteps;
     }
   }
 
   /**
-   * Snap a real-time moment (e.g. a live pad hit) to the nearest step index.
-   * Used so recorded hits land cleanly on the grid.
+   * Snap a real-time moment (e.g. a live pad hit) to the nearest step index
+   * within the loop. Used so recorded hits land cleanly on the grid.
+   * Tempo changes mid-play shift this slightly; fine for live recording.
    */
   quantizeToStep(atTime) {
     const pos = (atTime - this.startTime) / this.secondsPerStep();
-    let step = Math.round(pos) % this.steps;
-    if (step < 0) step += this.steps;
+    let step = Math.round(pos) % this.loopSteps;
+    if (step < 0) step += this.loopSteps;
     return step;
   }
 
@@ -118,5 +126,55 @@ SoundPad.Engine = class Engine {
     const src = this.ctx.createBufferSource();
     src.buffer = this.noiseBuffer;
     return src;
+  }
+};
+
+/* ------------------------------------------------------------------
+ * Channel — one per track: input → volume → pan → master.
+ * Nodes are created lazily on first use, because the AudioContext only
+ * exists after the first user gesture.
+ * ------------------------------------------------------------------ */
+SoundPad.Channel = class Channel {
+  constructor(engine) {
+    this.engine = engine;
+    this.volume = 1;
+    this.pan = 0;
+    this._gain = null;
+    this._pan = null;
+  }
+
+  /** The node instruments connect their voices to. */
+  get input() {
+    if (!this._gain) this._build();
+    return this._gain;
+  }
+
+  _build() {
+    const ctx = this.engine.ctx;
+    this._gain = ctx.createGain();
+    this._gain.gain.value = this.volume;
+    if (ctx.createStereoPanner) {
+      this._pan = ctx.createStereoPanner();
+      this._pan.pan.value = this.pan;
+      this._gain.connect(this._pan).connect(this.engine.master);
+    } else {
+      this._gain.connect(this.engine.master);
+    }
+  }
+
+  setVolume(v) {
+    this.volume = v;
+    if (this._gain) this._gain.gain.value = v;
+  }
+
+  setPan(p) {
+    this.pan = p;
+    if (this._pan) this._pan.pan.value = p;
+  }
+
+  dispose() {
+    if (this._gain) this._gain.disconnect();
+    if (this._pan) this._pan.disconnect();
+    this._gain = this._pan = null;
   }
 };

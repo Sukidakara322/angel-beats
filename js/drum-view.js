@@ -1,27 +1,35 @@
 /* ------------------------------------------------------------------
- * Sound Pad — Drum view
- * Owns the drum pads + step-sequencer UI and the drum pattern.
- * Implements the shared instrument interface used by app.js:
- *   build(), onStep(step,time), playLive(id), handleKey(key),
- *   highlightColumn(step), clearPlayhead(), getPattern(), setPattern(), clear()
+ * Sound Pad — Drum view (editor for a drum track)
+ * Pads + step grid. It edits the track's current part (sparse notes in
+ * the project) — it doesn't own any pattern data itself.
+ *
+ * Shared editor interface used by app.js:
+ *   build(), refresh(), playLive(key), handleKey(key),
+ *   highlightColumn(step), clearPlayhead(), clear(), destroy()
  * ------------------------------------------------------------------ */
 window.SoundPad = window.SoundPad || {};
 
 SoundPad.DrumView = class DrumView {
-  constructor(engine, root) {
+  constructor({ engine, root, project, track, instrument }) {
     this.engine = engine;
-    this.kit = new SoundPad.DrumKit(engine);
     this.root = root;
-    this.STEPS = engine.steps;
+    this.project = project;
+    this.track = track;
+    this.kit = instrument;
+    this.STEPS = project.partSteps;
     this.recordArmed = false;
 
-    this.pattern = {};
-    this.kit.drums.forEach((d) => (this.pattern[d.id] = new Array(this.STEPS).fill(false)));
-
-    this.cellEls = {};
+    this.cellEls = {};     // drumId -> [cell, ...]
+    this.columns = [];     // step -> [cell, ...]  (for fast playhead updates)
+    this.lastCol = -1;
     this.painting = false;
     this.paintValue = false;
-    document.addEventListener("mouseup", () => (this.painting = false));
+    this._onMouseUp = () => (this.painting = false);
+    document.addEventListener("mouseup", this._onMouseUp);
+  }
+
+  get part() {
+    return SoundPad.Project.currentPart(this.project, this.track);
   }
 
   build() {
@@ -29,7 +37,7 @@ SoundPad.DrumView = class DrumView {
       <section class="pads" data-role="pads"></section>
       <section class="sequencer">
         <div class="seq-head">
-          <h2>Drum Sequencer</h2>
+          <h2 data-role="title"></h2>
           <div class="beat-numbers" data-role="beats"></div>
         </div>
         <div class="seq-grid" data-role="grid"></div>
@@ -37,9 +45,11 @@ SoundPad.DrumView = class DrumView {
     this.padsEl = this.root.querySelector('[data-role="pads"]');
     this.beatsEl = this.root.querySelector('[data-role="beats"]');
     this.gridEl = this.root.querySelector('[data-role="grid"]');
+    this.titleEl = this.root.querySelector('[data-role="title"]');
     this._buildPads();
     this._buildBeats();
     this._buildGrid();
+    this.refresh();
   }
 
   _buildPads() {
@@ -62,6 +72,8 @@ SoundPad.DrumView = class DrumView {
   }
 
   _buildGrid() {
+    for (let i = 0; i < this.STEPS; i++) this.columns.push([]);
+
     this.kit.drums.forEach((d) => {
       this.cellEls[d.id] = [];
       const row = document.createElement("div");
@@ -83,7 +95,7 @@ SoundPad.DrumView = class DrumView {
         cell.addEventListener("mousedown", (e) => {
           e.preventDefault();
           this.painting = true;
-          this.paintValue = !this.pattern[d.id][i];
+          this.paintValue = !SoundPad.Project.findNote(this.part, i, d.id);
           this._setCell(d.id, i, this.paintValue);
         });
         cell.addEventListener("mouseenter", () => {
@@ -91,31 +103,39 @@ SoundPad.DrumView = class DrumView {
         });
         cells.appendChild(cell);
         this.cellEls[d.id].push(cell);
+        this.columns[i].push(cell);
       }
       row.appendChild(cells);
       this.gridEl.appendChild(row);
     });
   }
 
+  /** Edit the part and mirror it in the grid. */
   _setCell(id, step, on) {
-    this.pattern[id][step] = on;
+    SoundPad.Project.setNote(this.part, step, id, on);
     this.cellEls[id][step].classList.toggle("on", on);
   }
 
-  // --- Instrument interface -----------------------------------------
+  // --- Editor interface ---------------------------------------------
 
-  onStep(step, time) {
-    this.kit.drums.forEach((d) => {
-      if (this.pattern[d.id][step]) this.kit.trigger(d.id, time);
+  /** Redraw the grid from the current part's notes. */
+  refresh() {
+    const part = this.part;
+    this.titleEl.textContent = `${this.track.name} — ${part.name}`;
+    Object.values(this.cellEls).forEach((row) => row.forEach((c) => c.classList.remove("on")));
+    part.notes.forEach((n) => {
+      const cell = this.cellEls[n.key] && this.cellEls[n.key][n.step];
+      if (cell) cell.classList.add("on");
     });
   }
 
   async playLive(id) {
     await this.engine.init();
-    this.kit.trigger(id, this.engine.ctx.currentTime);
+    const now = this.engine.ctx.currentTime;
+    this.kit.trigger(id, now, 0, 1);
     this._flashPad(id);
     if (this.recordArmed && this.engine.isPlaying) {
-      const step = this.engine.quantizeToStep(this.engine.ctx.currentTime);
+      const step = this.engine.quantizeToStep(now) % this.STEPS;
       this._setCell(id, step, true);
     }
   }
@@ -135,34 +155,23 @@ SoundPad.DrumView = class DrumView {
   }
 
   highlightColumn(step) {
-    this.kit.drums.forEach((d) =>
-      this.cellEls[d.id].forEach((c, i) => c.classList.toggle("playing", i === step))
-    );
+    if (step === this.lastCol) return;
+    if (this.columns[this.lastCol]) this.columns[this.lastCol].forEach((c) => c.classList.remove("playing"));
+    if (this.columns[step]) this.columns[step].forEach((c) => c.classList.add("playing"));
+    this.lastCol = step;
   }
 
   clearPlayhead() {
-    this.kit.drums.forEach((d) =>
-      this.cellEls[d.id].forEach((c) => c.classList.remove("playing"))
-    );
-  }
-
-  getPattern() {
-    const snap = {};
-    this.kit.drums.forEach((d) => (snap[d.id] = this.pattern[d.id].slice()));
-    return snap;
-  }
-
-  setPattern(data) {
-    data = data || {};
-    this.kit.drums.forEach((d) => {
-      const row = data[d.id] || [];
-      for (let i = 0; i < this.STEPS; i++) this._setCell(d.id, i, !!row[i]);
-    });
+    this.highlightColumn(-1);
   }
 
   clear() {
-    this.kit.drums.forEach((d) => {
-      for (let i = 0; i < this.STEPS; i++) this._setCell(d.id, i, false);
-    });
+    SoundPad.Project.clearPart(this.part);
+    this.refresh();
+  }
+
+  destroy() {
+    document.removeEventListener("mouseup", this._onMouseUp);
+    this.root.innerHTML = "";
   }
 };

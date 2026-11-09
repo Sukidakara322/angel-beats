@@ -28,13 +28,19 @@ SoundPad.noteRange = (lowMidi, highMidi) => {
 };
 
 SoundPad.BassSynth = class BassSynth {
-  constructor(engine) {
+  constructor(engine, channel) {
     this.engine = engine;
+    this.channel = channel || null;
     this.driveCurve = this._shaperCurve(6);
   }
 
   get ctx() { return this.engine.ctx; }
-  get out() { return this.engine.master; }
+  get out() { return this.channel ? this.channel.input : this.engine.master; }
+
+  /** Instrument contract: key is a MIDI note number. */
+  trigger(midi, time, durSec, vel = 1) {
+    this.note(SoundPad.midiToFreq(midi), time, Math.max(0.12, durSec), vel);
+  }
 
   _shaperCurve(k) {
     const n = 1024;
@@ -51,10 +57,12 @@ SoundPad.BassSynth = class BassSynth {
    * @param {number} freq  fundamental in Hz
    * @param {number} time  audio-clock start time
    * @param {number} dur   note length in seconds
+   * @param {number} vel   velocity 0..1 (scales the amp envelope)
    */
-  note(freq, time, dur = 0.22) {
+  note(freq, time, dur = 0.22, vel = 1) {
     const ctx = this.ctx;
     const end = time + dur;
+    const v = Math.max(0.01, vel);
 
     // Plucky low-pass: opens bright on attack, closes toward the fundamental.
     const filter = ctx.createBiquadFilter();
@@ -91,11 +99,17 @@ SoundPad.BassSynth = class BassSynth {
 
     // Amp envelope: fast pluck attack, short decay to sustain, quick release.
     amp.gain.setValueAtTime(0.0001, time);
-    amp.gain.exponentialRampToValueAtTime(0.95, time + 0.008);
-    amp.gain.exponentialRampToValueAtTime(0.55, time + 0.12);
-    amp.gain.setValueAtTime(0.55, Math.max(time + 0.12, end - 0.05));
+    amp.gain.exponentialRampToValueAtTime(0.95 * v, time + 0.008);
+    amp.gain.exponentialRampToValueAtTime(0.55 * v, time + 0.12);
+    amp.gain.setValueAtTime(0.55 * v, Math.max(time + 0.12, end - 0.05));
     amp.gain.exponentialRampToValueAtTime(0.0001, end);
 
     [saw, sq, sub].forEach((o) => { o.start(time); o.stop(end + 0.03); });
   }
 };
+
+SoundPad.Instruments.register("bass", {
+  label: "Bass",
+  editor: "BassView",
+  create: (engine, channel) => new SoundPad.BassSynth(engine, channel),
+});
