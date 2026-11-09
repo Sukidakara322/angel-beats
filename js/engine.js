@@ -29,8 +29,8 @@ SoundPad.Engine = class Engine {
     this.scheduleAheadSec = 0.1;   // how far ahead we schedule audio
 
     this._timer = null;
-    this.onStep = null;            // (stepIndex, time) => void, set by app
-    this.drawQueue = [];           // {step, time} pushed for UI playhead
+    this.onStep = null;            // (stepIndex, time) => info, set by app
+    this.drawQueue = [];           // {step, time, info} pushed for UI playhead
   }
 
   /** Must be called from a user gesture (browsers block audio otherwise). */
@@ -93,8 +93,9 @@ SoundPad.Engine = class Engine {
   /** Look-ahead: schedule every step that falls inside the near future. */
   _scheduler() {
     while (this.nextNoteTime < this.ctx.currentTime + this.scheduleAheadSec) {
-      if (this.onStep) this.onStep(this.currentStep, this.nextNoteTime);
-      this.drawQueue.push({ step: this.currentStep, time: this.nextNoteTime });
+      // onStep may return position info for the UI (and may change loopSteps).
+      const info = this.onStep ? this.onStep(this.currentStep, this.nextNoteTime) : null;
+      this.drawQueue.push({ step: this.currentStep, time: this.nextNoteTime, info });
       this.nextNoteTime += this.secondsPerStep();
       this.currentStep = (this.currentStep + 1) % this.loopSteps;
     }

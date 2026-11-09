@@ -7,8 +7,12 @@
  *     partSteps,                 // every part in the project has this length
  *     tracks:   [{ id, name, type, volume, pan, mute, solo, currentPartId }],
  *     parts:    [{ id, trackId, name, notes: [{ step, len, key, vel }] }],
- *     timeline: { slots, cells: { [trackId]: [partId | null, ...] } }
+ *     timeline: { slots, cells: { [trackId]: [partId | null, ...] },
+ *                 loop: { start, end } | null }   // slot range, end exclusive
  *   }
+ *
+ * Timeline: every slot is exactly one part long (partSteps), and each
+ * track's lane holds one of that track's parts per slot (or nothing).
  *
  * Notes are sparse: only notes that exist are stored. `key` is a drum id
  * ("kick") for drum tracks or a MIDI number (33) for pitched tracks.
@@ -21,6 +25,7 @@ SoundPad.Project = {
   DEFAULT_PART_STEPS: 32,          // 2 bars of 16th notes
   PART_LENGTHS: [16, 32, 64],      // 1, 2, 4 bars
   DEFAULT_SLOTS: 8,
+  MAX_SLOTS: 64,
 
   uid(prefix) {
     return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -35,7 +40,7 @@ SoundPad.Project = {
       partSteps: this.DEFAULT_PART_STEPS,
       tracks: [],
       parts: [],
-      timeline: { slots: this.DEFAULT_SLOTS, cells: {} },
+      timeline: { slots: this.DEFAULT_SLOTS, cells: {}, loop: null },
     };
     this.addTrack(p, "drums", "Drums");
     this.addTrack(p, "bass", "Bass");
@@ -185,6 +190,98 @@ SoundPad.Project = {
     p.partSteps = steps;
   },
 
+  // --- Timeline (song) ----------------------------------------------
+
+  /** Put a part (of that track) in a slot, or null to empty it. Returns true if changed. */
+  setCell(p, trackId, slot, partId) {
+    const row = p.timeline.cells[trackId];
+    if (!row || slot < 0 || slot >= p.timeline.slots) return false;
+    const value = partId || null;
+    if (value) {
+      const part = this.part(p, value);
+      if (!part || part.trackId !== trackId) return false;
+    }
+    if (row[slot] === value) return false;
+    row[slot] = value;
+    return true;
+  },
+
+  /** Index just past the last slot that holds any part (0 for an empty song). */
+  songEnd(p) {
+    let end = 0;
+    Object.values(p.timeline.cells).forEach((row) =>
+      row.forEach((id, i) => { if (id) end = Math.max(end, i + 1); })
+    );
+    return end;
+  },
+
+  /** Slot range the song plays: the loop if set, else start → last used slot (min 1 slot). */
+  songRange(p) {
+    const loop = p.timeline.loop;
+    if (loop) return { start: loop.start, end: loop.end };
+    return { start: 0, end: Math.max(1, this.songEnd(p)) };
+  },
+
+  setLoop(p, start, end) {
+    const s = Math.max(0, Math.min(start, end));
+    const e = Math.min(p.timeline.slots, Math.max(start, end));
+    p.timeline.loop = e > s ? { start: s, end: e } : null;
+  },
+
+  clearLoop(p) {
+    p.timeline.loop = null;
+  },
+
+  /** Insert `n` empty slots before index `at`. */
+  insertSlots(p, at, n = 1) {
+    const tl = p.timeline;
+    n = Math.min(n, this.MAX_SLOTS - tl.slots);
+    if (n <= 0) return false;
+    at = Math.max(0, Math.min(at, tl.slots));
+    Object.values(tl.cells).forEach((row) => row.splice(at, 0, ...new Array(n).fill(null)));
+    tl.slots += n;
+    if (tl.loop) {
+      if (at <= tl.loop.start) { tl.loop.start += n; tl.loop.end += n; }
+      else if (at < tl.loop.end) tl.loop.end += n;
+    }
+    return true;
+  },
+
+  addSlot(p) {
+    return this.insertSlots(p, p.timeline.slots, 1);
+  },
+
+  /** Remove slots [start, end). At least one slot always remains. */
+  deleteSlots(p, start, end) {
+    const tl = p.timeline;
+    const n = end - start;
+    if (n <= 0 || tl.slots - n < 1) return false;
+    Object.values(tl.cells).forEach((row) => row.splice(start, n));
+    tl.slots -= n;
+    tl.loop = null;
+    return true;
+  },
+
+  /**
+   * Copy slots [start, end) and insert the copy right after them.
+   * The loop/selection moves onto the copy, so pressing it again keeps
+   * extending the song (verse, verse, verse…).
+   */
+  duplicateSlots(p, start, end) {
+    const tl = p.timeline;
+    const n = end - start;
+    if (n <= 0 || tl.slots + n > this.MAX_SLOTS) return false;
+    Object.values(tl.cells).forEach((row) => row.splice(end, 0, ...row.slice(start, end)));
+    tl.slots += n;
+    tl.loop = { start: end, end: end + n };
+    return true;
+  },
+
+  clearTimeline(p) {
+    Object.values(p.timeline.cells).forEach((row) => row.fill(null));
+    p.timeline.loop = null;
+  },
+
   // --- Notes ---------------------------------------------------------
 
   /** Note that starts exactly at (step, key). */
@@ -251,9 +348,14 @@ SoundPad.Project = {
     p.partSteps = this.PART_LENGTHS.includes(p.partSteps) ? p.partSteps : this.DEFAULT_PART_STEPS;
     p.tracks = Array.isArray(p.tracks) ? p.tracks : [];
     p.parts = Array.isArray(p.parts) ? p.parts : [];
-    p.timeline = p.timeline || { slots: this.DEFAULT_SLOTS, cells: {} };
-    p.timeline.slots = p.timeline.slots || this.DEFAULT_SLOTS;
+    p.timeline = p.timeline || {};
+    p.timeline.slots = Math.max(1, Math.min(this.MAX_SLOTS, p.timeline.slots || this.DEFAULT_SLOTS));
     p.timeline.cells = p.timeline.cells || {};
+    const loop = p.timeline.loop;
+    p.timeline.loop =
+      loop && loop.start >= 0 && loop.end <= p.timeline.slots && loop.end > loop.start
+        ? { start: loop.start, end: loop.end }
+        : null;
 
     p.parts.forEach((part) => {
       part.notes = (part.notes || [])

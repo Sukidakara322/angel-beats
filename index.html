@@ -11,7 +11,7 @@
     <div class="brand">🥁 Sound&nbsp;Pad</div>
     <nav class="instruments">
       <div class="instruments" id="trackTabs"><!-- one tab per track, built by app.js --></div>
-      <button class="inst" disabled title="Coming in Phase 2">Song</button>
+      <button class="inst song-tab" id="songTab" title="Arrange parts on the timeline">♫ Song</button>
     </nav>
   </header>
 
@@ -20,7 +20,13 @@
     <section class="transport">
       <button id="playBtn" class="tbtn play" title="Play / Stop (Space)">▶</button>
       <button id="recBtn" class="tbtn rec" title="Arm recording (R)">● REC</button>
-      <button id="clearBtn" class="tbtn" title="Clear pattern">Clear</button>
+      <button id="clearBtn" class="tbtn" title="Clear the open part (or the timeline in Song)">Clear</button>
+
+      <div class="mode-toggle" title="Pattern: loop the open parts · Song: play the timeline">
+        <button data-mode="pattern" class="on">Pattern</button>
+        <button data-mode="song">Song</button>
+      </div>
+      <span class="position" id="position">Bar 1 · 1</span>
 
       <label class="ctrl">
         <span>Tempo</span>
@@ -46,7 +52,7 @@
     </section>
 
     <!-- Parts of the active track -->
-    <section class="partbar">
+    <section class="partbar" id="partBar">
       <span class="pb-label" id="pbTrack">Parts</span>
       <div class="pb-chips" id="pbChips"><!-- built by app.js --></div>
       <div class="pb-actions">
@@ -59,6 +65,9 @@
 
     <!-- Track editors (one visible at a time; all tracks play together) -->
     <div id="views"><!-- one .inst-view per track, built by app.js --></div>
+
+    <!-- Song timeline -->
+    <div id="songView" class="hidden"><!-- built by SongView --></div>
 
     <!-- Saved projects -->
     <section class="library">
@@ -88,6 +97,7 @@
   <script src="js/velocity-lane.js"></script>
   <script src="js/drum-view.js"></script>
   <script src="js/piano-roll.js"></script>
+  <script src="js/song-view.js"></script>
   <script src="js/store.js"></script>
   <script src="js/app.js"></script>
 </body>
