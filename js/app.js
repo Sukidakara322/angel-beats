@@ -32,6 +32,13 @@
   const storeNoteEl = document.getElementById("storeNote");
   const tabsEl = document.getElementById("trackTabs");
   const viewsEl = document.getElementById("views");
+  const partLenSel = document.getElementById("partLen");
+  const pbTrackEl = document.getElementById("pbTrack");
+  const pbChipsEl = document.getElementById("pbChips");
+  const pbNew = document.getElementById("pbNew");
+  const pbDup = document.getElementById("pbDup");
+  const pbRename = document.getElementById("pbRename");
+  const pbDelete = document.getElementById("pbDelete");
 
   const IDLE_HINT = "Press ▶ or Space to start · Arm REC then play to record";
 
@@ -41,7 +48,8 @@
 
   /** Tear down the old project's tracks and build the new one's. */
   function mountProject(next) {
-    // Remember which kind of track was open so a load keeps that tab.
+    // Remember which track was open so a rebuild/load keeps that tab.
+    const prevId = activeTrackId;
     const prevType = activeRt()?.track.type;
 
     rts.forEach((rt) => {
@@ -55,6 +63,7 @@
     engine.setBpm(project.bpm);
     project.bpm = engine.bpm;
     bpmInput.value = engine.bpm;
+    partLenSel.value = String(project.partSteps);
     document.documentElement.style.setProperty("--steps", project.partSteps);
 
     rts = project.tracks.map((track) => {
@@ -68,7 +77,7 @@
       root.className = "inst-view hidden";
       viewsEl.appendChild(root);
       const View = SoundPad[def.editor];
-      const view = new View({ engine, root, project, track, instrument });
+      const view = new View({ engine, root, project, track, instrument, options: def.options });
       view.build();
 
       const tab = document.createElement("button");
@@ -83,8 +92,90 @@
     player.setProject(project, rts);
     lastDrawnStep = -1;
 
-    const keep = rts.find((rt) => rt.track.type === prevType) || rts[0];
+    const keep =
+      rts.find((rt) => rt.track.id === prevId) ||
+      rts.find((rt) => rt.track.type === prevType) ||
+      rts[0];
     setActive(keep.track.id);
+  }
+
+  // --- Parts (per track) --------------------------------------------
+
+  /** Chips for the active track's parts + enable/disable actions. */
+  function renderPartBar() {
+    const rt = activeRt();
+    if (!rt) return;
+    const track = rt.track;
+    const parts = P.partsOf(project, track.id);
+    pbTrackEl.textContent = `${track.name} parts`;
+    pbChipsEl.innerHTML = "";
+    parts.forEach((part) => {
+      const chip = document.createElement("button");
+      chip.className = "chip" + (part.id === track.currentPartId ? " active" : "");
+      chip.textContent = part.name;
+      chip.title = "Click to edit · double-click to rename";
+      chip.addEventListener("click", () => selectPart(part.id));
+      chip.addEventListener("dblclick", () => renamePart(part.id));
+      pbChipsEl.appendChild(chip);
+    });
+    pbDelete.disabled = parts.length <= 1;
+  }
+
+  /** Something changed which part the active track has open. */
+  function partChanged() {
+    const rt = activeRt();
+    rt.view.refresh();
+    renderPartBar();
+  }
+
+  function selectPart(partId) {
+    P.setCurrentPart(project, activeTrackId, partId);
+    partChanged();
+  }
+
+  function renamePart(partId) {
+    const part = P.part(project, partId);
+    const name = prompt("Rename part", part.name);
+    if (name === null) return;
+    P.renamePart(project, partId, name);
+    partChanged();
+  }
+
+  pbNew.addEventListener("click", () => { P.addPart(project, activeTrackId); partChanged(); });
+  pbDup.addEventListener("click", () => {
+    P.duplicatePart(project, activeRt().track.currentPartId);
+    partChanged();
+  });
+  pbRename.addEventListener("click", () => renamePart(activeRt().track.currentPartId));
+  pbDelete.addEventListener("click", () => {
+    const part = P.currentPart(project, activeRt().track);
+    if (part.notes.length && !confirm(`Delete "${part.name}" and its ${part.notes.length} notes?`)) return;
+    P.deletePart(project, part.id);
+    partChanged();
+  });
+
+  // --- Part length (project-wide) -----------------------------------
+
+  function changePartLength() {
+    const steps = parseInt(partLenSel.value, 10);
+    const old = project.partSteps;
+    if (steps === old) return;
+    const bars = (n) => `${n / 16} bar${n === 16 ? "" : "s"}`;
+
+    let repeat = false;
+    if (steps < old) {
+      const lost = P.notesBeyond(project, steps);
+      if (lost && !confirm(`Shorten every part to ${bars(steps)}? ${lost} note(s) after that will be removed.`)) {
+        partLenSel.value = String(old);
+        return;
+      }
+    } else if (project.parts.some((x) => x.notes.length)) {
+      repeat = confirm(
+        `Make every part ${bars(steps)} long.\n\nOK = repeat each part's ${bars(old)} to fill\nCancel = add empty space at the end`
+      );
+    }
+    P.setPartSteps(project, steps, { repeat });
+    mountProject(project);   // rebuild editors at the new length
   }
 
   // --- Transport ----------------------------------------------------
@@ -133,6 +224,7 @@
       rt.root.classList.toggle("hidden", !on);
     });
     applyRecordArm();   // record arming follows the visible track
+    renderPartBar();
   }
 
   // --- Save / load ---------------------------------------------------
@@ -182,8 +274,9 @@
 
       const meta = document.createElement("span");
       meta.className = "meta";
-      const trackCount = rec.tracks ? rec.tracks.length : 2;
-      meta.textContent = `${rec.bpm} BPM · ${trackCount} tracks`;
+      const tracks = Array.isArray(rec.tracks) ? rec.tracks.length : 0;
+      const parts = Array.isArray(rec.parts) ? rec.parts.length : 0;
+      meta.textContent = `${rec.bpm} BPM · ${tracks} tracks · ${parts} parts`;
 
       const spacer = document.createElement("span");
       spacer.className = "spacer";
@@ -232,12 +325,13 @@
     project.bpm = engine.bpm;
   });
   volumeInput.addEventListener("input", () => engine.setVolume(parseFloat(volumeInput.value)));
+  partLenSel.addEventListener("change", changePartLength);
 
   saveBtn.addEventListener("click", saveCurrent);
   seqNameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") saveCurrent(); });
 
   document.addEventListener("keydown", (e) => {
-    if (e.repeat || e.target.tagName === "INPUT") return;
+    if (e.repeat || ["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName)) return;
     const k = e.key.toLowerCase();
     if (k === " ") { e.preventDefault(); togglePlay(); return; }
     if (k === "r") { toggleRecord(); return; }
@@ -246,6 +340,9 @@
   });
 
   // --- Init ----------------------------------------------------------
+
+  // Read-only handle for debugging in the browser console.
+  SoundPad.app = { get project() { return project; } };
 
   storeNoteEl.textContent = SoundPad.Store.backendLabel();
   storeNoteEl.classList.toggle("warn", !SoundPad.Store.useServer);

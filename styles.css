@@ -92,6 +92,32 @@ html, body {
   border: 1px solid var(--line); border-radius: 6px; font-size: 15px; text-align: center;
 }
 .ctrl.slider input { accent-color: var(--accent-2); }
+.ctrl select {
+  padding: 8px; background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 6px; font-size: 14px; cursor: pointer;
+}
+.tbtn.small { padding: 7px 12px; font-size: 13px; }
+.tbtn.danger:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.tbtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ---------- Part bar ---------- */
+.partbar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 14px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  margin-bottom: -8px;
+}
+.pb-label { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.pb-chips { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; }
+.pb-actions { display: flex; gap: 6px; }
+.chip {
+  padding: 6px 12px; font-size: 13px; cursor: pointer;
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 999px;
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.chip:hover { border-color: #45505f; }
+.chip.active { background: var(--step-on); color: #0e1116; border-color: var(--step-on); font-weight: 600; }
 .hint { margin-left: auto; font-size: 12px; color: var(--muted); max-width: 320px; }
 
 /* ---------- Instrument views ---------- */
@@ -157,7 +183,8 @@ html, body {
   padding: 16px;
 }
 .seq-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 10px; }
-.seq-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.seq-head h2 { margin: 0; font-size: 15px; font-weight: 600; white-space: nowrap; }
+.seq-hint { font-size: 12px; color: var(--muted); }
 .beat-numbers { display: grid; grid-template-columns: repeat(var(--steps), 1fr); gap: 4px; flex: 1; margin-left: 90px; }
 .beat-numbers span { text-align: center; font-size: 11px; color: var(--muted); }
 
@@ -183,16 +210,29 @@ html, body {
 .cell.beat { background: #232b36; }          /* first step of each beat, slightly lighter */
 .cell.bar { border-left: 2px solid #39424f; }  /* start of each bar (every 8 steps) */
 
-/* Piano-roll variant (bass): compact rows, note-name labels, sharp shading */
-.seq-grid.piano { gap: 3px; }
-.seq-grid.piano .cell { aspect-ratio: auto; height: 15px; border-radius: 3px; }
-.note-label { font-size: 11px; }
-.sharp-row .note-label { color: #6b7480; }
-.seq-grid.piano .sharp-row .cell:not(.on) { background: #171c23; }
-.seq-grid.piano .sharp-row .cell.beat:not(.on) { background: #1b212a; }
 .cell.on { background: var(--step-on); border-color: var(--step-on); }
+/* Brightness follows velocity (--vel set per cell by DrumView). */
+.cell.on { background: color-mix(in srgb, var(--step-on) calc(30% + var(--vel, 1) * 70%), var(--panel-2)); }
 .cell.playing { box-shadow: 0 0 0 2px var(--playhead); }
 .cell:hover { border-color: #45505f; }
+
+.seq-label.selectable { cursor: pointer; border-radius: 4px; }
+.seq-label.selectable:hover { color: var(--text); }
+.seq-label.selected { color: var(--step-on); font-weight: 600; }
+
+/* Piano roll (canvas) */
+.roll-scroll {
+  max-height: 420px; overflow-y: auto; overflow-x: hidden;
+  border: 1px solid var(--line); border-radius: 8px;
+}
+.roll { display: block; touch-action: none; }
+
+/* Velocity lane (canvas) */
+.vel-head { margin: 12px 0 6px; font-size: 12px; color: var(--muted); }
+.vel-head b { color: var(--step-on); }
+.vel-head span { margin-left: 8px; opacity: 0.8; }
+.vel-lane { display: block; border-radius: 6px; cursor: ns-resize; touch-action: none; }
+.drum-vel-row { display: flex; gap: 6px; }
 
 /* ---------- Library ---------- */
 .library {

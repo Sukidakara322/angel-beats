@@ -39,13 +39,14 @@ SoundPad.DrumKit = class DrumKit {
   get out() { return this.channel ? this.channel.input : this.engine.master; }
 
   /** Instrument contract. Drums ignore duration (one-shots). */
-  trigger(id, time, durSec, vel = 1) {
+  trigger(id, time, durSec, vel = SoundPad.DEFAULT_VEL) {
     const d = this.byId[id];
     if (!d) return;
     let out = this.out;
-    if (vel !== 1) {
+    const gain = SoundPad.velToGain(vel);
+    if (gain !== 1) {
       const g = this.ctx.createGain();
-      g.gain.value = Math.max(0, vel);
+      g.gain.value = gain;
       g.connect(out);
       out = g;
     }

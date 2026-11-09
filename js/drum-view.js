@@ -1,7 +1,8 @@
 /* ------------------------------------------------------------------
  * Sound Pad — Drum view (editor for a drum track)
- * Pads + step grid. It edits the track's current part (sparse notes in
- * the project) — it doesn't own any pattern data itself.
+ * Pads + step grid + a velocity lane for the selected drum row.
+ * It edits the track's current part (sparse notes in the project) —
+ * it doesn't own any pattern data itself.
  *
  * Shared editor interface used by app.js:
  *   build(), refresh(), playLive(key), handleKey(key),
@@ -20,8 +21,10 @@ SoundPad.DrumView = class DrumView {
     this.recordArmed = false;
 
     this.cellEls = {};     // drumId -> [cell, ...]
+    this.labelEls = {};    // drumId -> row label
     this.columns = [];     // step -> [cell, ...]  (for fast playhead updates)
     this.lastCol = -1;
+    this.selected = this.kit.drums[0].id;   // row shown in the velocity lane
     this.painting = false;
     this.paintValue = false;
     this._onMouseUp = () => (this.painting = false);
@@ -41,15 +44,39 @@ SoundPad.DrumView = class DrumView {
           <div class="beat-numbers" data-role="beats"></div>
         </div>
         <div class="seq-grid" data-role="grid"></div>
+        <div class="vel-head">Velocity — <b data-role="velName"></b> <span>click a row name to pick the drum · drag to set</span></div>
+        <div class="drum-vel-row"><div class="seq-label"></div><canvas class="vel-lane" data-role="vel"></canvas></div>
       </section>`;
-    this.padsEl = this.root.querySelector('[data-role="pads"]');
-    this.beatsEl = this.root.querySelector('[data-role="beats"]');
-    this.gridEl = this.root.querySelector('[data-role="grid"]');
-    this.titleEl = this.root.querySelector('[data-role="title"]');
+    const q = (r) => this.root.querySelector(`[data-role="${r}"]`);
+    this.padsEl = q("pads");
+    this.beatsEl = q("beats");
+    this.gridEl = q("grid");
+    this.titleEl = q("title");
+    this.velNameEl = q("velName");
+    this.velCanvas = q("vel");
     this._buildPads();
     this._buildBeats();
     this._buildGrid();
+
+    this.vel = new SoundPad.VelocityLane(this.velCanvas, {
+      steps: this.STEPS,
+      getNotes: () => this.part.notes.filter((n) => n.key === this.selected),
+      columnRect: (s) => this._columnRect(s),
+      onChange: () => this._paintRow(this.selected),
+    });
+    this._ro = new ResizeObserver(() => this.vel.resize(this.velCanvas.parentElement.clientWidth - 90));
+    this._ro.observe(this.gridEl);
+
+    this.selectRow(this.selected);
     this.refresh();
+  }
+
+  /** Column position of a step, relative to the velocity canvas (matches the cells above). */
+  _columnRect(step) {
+    const cell = this.cellEls[this.selected][step];
+    const cr = cell.getBoundingClientRect();
+    const lr = this.velCanvas.getBoundingClientRect();
+    return { x: cr.left - lr.left, w: cr.width };
   }
 
   _buildPads() {
@@ -80,8 +107,11 @@ SoundPad.DrumView = class DrumView {
       row.className = "seq-row";
 
       const label = document.createElement("div");
-      label.className = "seq-label";
+      label.className = "seq-label selectable";
       label.textContent = d.name;
+      label.title = "Show this drum in the velocity lane";
+      label.addEventListener("click", () => this.selectRow(d.id));
+      this.labelEls[d.id] = label;
       row.appendChild(label);
 
       const cells = document.createElement("div");
@@ -112,27 +142,42 @@ SoundPad.DrumView = class DrumView {
 
   /** Edit the part and mirror it in the grid. */
   _setCell(id, step, on) {
-    SoundPad.Project.setNote(this.part, step, id, on);
-    this.cellEls[id][step].classList.toggle("on", on);
+    if (!SoundPad.Project.setNote(this.part, step, id, on)) return;
+    this._paintRow(id);
+    if (id === this.selected) this.vel.draw();
+  }
+
+  /** Redraw one drum row from the part (on/off + velocity shading). */
+  _paintRow(id) {
+    const row = this.cellEls[id];
+    row.forEach((c) => { c.classList.remove("on"); c.style.removeProperty("--vel"); });
+    this.part.notes.forEach((n) => {
+      if (n.key !== id || !row[n.step]) return;
+      row[n.step].classList.add("on");
+      row[n.step].style.setProperty("--vel", n.vel);
+    });
+  }
+
+  selectRow(id) {
+    this.selected = id;
+    Object.entries(this.labelEls).forEach(([k, el]) => el.classList.toggle("selected", k === id));
+    this.velNameEl.textContent = this.kit.byId[id].name;
+    this.vel.draw();
   }
 
   // --- Editor interface ---------------------------------------------
 
   /** Redraw the grid from the current part's notes. */
   refresh() {
-    const part = this.part;
-    this.titleEl.textContent = `${this.track.name} — ${part.name}`;
-    Object.values(this.cellEls).forEach((row) => row.forEach((c) => c.classList.remove("on")));
-    part.notes.forEach((n) => {
-      const cell = this.cellEls[n.key] && this.cellEls[n.key][n.step];
-      if (cell) cell.classList.add("on");
-    });
+    this.titleEl.textContent = `${this.track.name} — ${this.part.name}`;
+    this.kit.drums.forEach((d) => this._paintRow(d.id));
+    this.vel.draw();
   }
 
   async playLive(id) {
     await this.engine.init();
     const now = this.engine.ctx.currentTime;
-    this.kit.trigger(id, now, 0, 1);
+    this.kit.trigger(id, now, 0);
     this._flashPad(id);
     if (this.recordArmed && this.engine.isPlaying) {
       const step = this.engine.quantizeToStep(now) % this.STEPS;
@@ -172,6 +217,8 @@ SoundPad.DrumView = class DrumView {
 
   destroy() {
     document.removeEventListener("mouseup", this._onMouseUp);
+    if (this._ro) this._ro.disconnect();
+    this.vel.destroy();
     this.root.innerHTML = "";
   }
 };

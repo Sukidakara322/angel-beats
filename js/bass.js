@@ -38,7 +38,7 @@ SoundPad.BassSynth = class BassSynth {
   get out() { return this.channel ? this.channel.input : this.engine.master; }
 
   /** Instrument contract: key is a MIDI note number. */
-  trigger(midi, time, durSec, vel = 1) {
+  trigger(midi, time, durSec, vel = SoundPad.DEFAULT_VEL) {
     this.note(SoundPad.midiToFreq(midi), time, Math.max(0.12, durSec), vel);
   }
 
@@ -59,10 +59,10 @@ SoundPad.BassSynth = class BassSynth {
    * @param {number} dur   note length in seconds
    * @param {number} vel   velocity 0..1 (scales the amp envelope)
    */
-  note(freq, time, dur = 0.22, vel = 1) {
+  note(freq, time, dur = 0.22, vel = SoundPad.DEFAULT_VEL) {
     const ctx = this.ctx;
     const end = time + dur;
-    const v = Math.max(0.01, vel);
+    const v = Math.max(0.01, SoundPad.velToGain(vel));
 
     // Plucky low-pass: opens bright on attack, closes toward the fundamental.
     const filter = ctx.createBiquadFilter();
@@ -110,6 +110,7 @@ SoundPad.BassSynth = class BassSynth {
 
 SoundPad.Instruments.register("bass", {
   label: "Bass",
-  editor: "BassView",
+  editor: "PianoRollView",
+  options: { low: 24, high: 60, base: 28 },   // C1–C4 roll, keyboard starts at E1
   create: (engine, channel) => new SoundPad.BassSynth(engine, channel),
 });

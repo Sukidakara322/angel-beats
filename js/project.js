@@ -12,13 +12,14 @@
  *
  * Notes are sparse: only notes that exist are stored. `key` is a drum id
  * ("kick") for drum tracks or a MIDI number (33) for pitched tracks.
- * `len` is in steps, `vel` is 0..1.
+ * `len` is in steps, `vel` is 0..1 (SoundPad.DEFAULT_VEL = normal).
  * ------------------------------------------------------------------ */
 window.SoundPad = window.SoundPad || {};
 
 SoundPad.Project = {
   VERSION: 2,
-  DEFAULT_PART_STEPS: 32,   // 2 bars of 16th notes
+  DEFAULT_PART_STEPS: 32,          // 2 bars of 16th notes
+  PART_LENGTHS: [16, 32, 64],      // 1, 2, 4 bars
   DEFAULT_SLOTS: 8,
 
   uid(prefix) {
@@ -41,7 +42,7 @@ SoundPad.Project = {
     return p;
   },
 
-  // --- Tracks & parts ------------------------------------------------
+  // --- Tracks --------------------------------------------------------
 
   /** Add a track (with one empty part) and return it. */
   addTrack(p, type, name) {
@@ -61,14 +62,47 @@ SoundPad.Project = {
     return track;
   },
 
-  /** Add an empty part to a track, make it the track's current part. */
+  track(p, id) {
+    return p.tracks.find((t) => t.id === id) || null;
+  },
+
+  // --- Parts ---------------------------------------------------------
+
+  part(p, id) {
+    return p.parts.find((x) => x.id === id) || null;
+  },
+
+  partsOf(p, trackId) {
+    return p.parts.filter((x) => x.trackId === trackId);
+  },
+
+  /** The part currently open in a track's editor (and looped in pattern mode). */
+  currentPart(p, track) {
+    return this.part(p, track.currentPartId);
+  },
+
+  setCurrentPart(p, trackId, partId) {
+    const part = this.part(p, partId);
+    if (part && part.trackId === trackId) this.track(p, trackId).currentPartId = partId;
+  },
+
+  /** "Drums 1", "Drums 2"… — first name not already used on this track. */
+  _uniqueName(p, trackId, base, numbered) {
+    const names = new Set(this.partsOf(p, trackId).map((x) => x.name));
+    if (!numbered && !names.has(base)) return base;
+    for (let n = numbered ? 1 : 2; ; n++) {
+      const candidate = `${base} ${n}`;
+      if (!names.has(candidate)) return candidate;
+    }
+  },
+
+  /** Add an empty part to a track and make it the current part. */
   addPart(p, trackId, name) {
     const track = this.track(p, trackId);
-    const count = p.parts.filter((x) => x.trackId === trackId).length;
     const part = {
       id: this.uid("prt"),
       trackId,
-      name: name || `${track.name} ${count + 1}`,
+      name: name || this._uniqueName(p, trackId, track.name, true),
       notes: [],
     };
     p.parts.push(part);
@@ -76,34 +110,124 @@ SoundPad.Project = {
     return part;
   },
 
-  track(p, id) {
-    return p.tracks.find((t) => t.id === id) || null;
+  /** Copy a part (notes included), place it right after the original, make it current. */
+  duplicatePart(p, partId) {
+    const src = this.part(p, partId);
+    if (!src) return null;
+    const copy = {
+      id: this.uid("prt"),
+      trackId: src.trackId,
+      name: this._uniqueName(p, src.trackId, `${src.name} copy`, false),
+      notes: src.notes.map((n) => ({ ...n })),
+    };
+    p.parts.splice(p.parts.indexOf(src) + 1, 0, copy);
+    this.track(p, src.trackId).currentPartId = copy.id;
+    return copy;
   },
 
-  part(p, id) {
-    return p.parts.find((x) => x.id === id) || null;
+  renamePart(p, partId, name) {
+    const part = this.part(p, partId);
+    const clean = (name || "").trim().slice(0, 40);
+    if (part && clean) part.name = clean;
   },
 
-  /** The part currently open in a track's editor. */
-  currentPart(p, track) {
-    return this.part(p, track.currentPartId);
+  /**
+   * Delete a part. A track always keeps at least one part, so deleting the
+   * last one is refused (returns false). Timeline cells using it are emptied.
+   */
+  deletePart(p, partId) {
+    const part = this.part(p, partId);
+    if (!part) return false;
+    const siblings = this.partsOf(p, part.trackId);
+    if (siblings.length <= 1) return false;
+
+    const idx = siblings.indexOf(part);
+    p.parts.splice(p.parts.indexOf(part), 1);
+    const row = p.timeline.cells[part.trackId] || [];
+    row.forEach((id, i) => { if (id === partId) row[i] = null; });
+
+    const track = this.track(p, part.trackId);
+    if (track.currentPartId === partId) {
+      const next = siblings[idx + 1] || siblings[idx - 1];
+      track.currentPartId = next.id;
+    }
+    return true;
+  },
+
+  // --- Part length (project-wide) -------------------------------------
+
+  /** How many notes would be lost if parts were shortened to `steps`. */
+  notesBeyond(p, steps) {
+    return p.parts.reduce((sum, part) => sum + part.notes.filter((n) => n.step >= steps).length, 0);
+  },
+
+  /**
+   * Change the length of every part. Shortening drops notes past the end
+   * and trims long notes; lengthening adds silence, or repeats the existing
+   * content to fill (repeat: true).
+   */
+  setPartSteps(p, steps, { repeat = false } = {}) {
+    const old = p.partSteps;
+    if (steps === old) return;
+    p.parts.forEach((part) => {
+      if (steps < old) {
+        part.notes = part.notes.filter((n) => n.step < steps);
+      } else if (repeat) {
+        const base = part.notes.map((n) => ({ ...n }));
+        for (let off = old; off < steps; off += old) {
+          base.forEach((n) => {
+            if (n.step + off < steps) part.notes.push({ ...n, step: n.step + off });
+          });
+        }
+      }
+      part.notes.forEach((n) => (n.len = Math.min(n.len, steps - n.step)));
+    });
+    p.partSteps = steps;
   },
 
   // --- Notes ---------------------------------------------------------
 
+  /** Note that starts exactly at (step, key). */
   findNote(part, step, key) {
     return part.notes.find((n) => n.step === step && n.key === key) || null;
   },
 
+  /** Note of `key` that is sounding at `step` (covers it), latest start wins. */
+  noteAt(part, step, key) {
+    let hit = null;
+    for (const n of part.notes) {
+      if (n.key === key && n.step <= step && step < n.step + n.len && (!hit || n.step > hit.step)) hit = n;
+    }
+    return hit;
+  },
+
+  /** Add a note, replacing any note that starts at the same step & key. */
+  addNote(part, { step, key, len = 1, vel = SoundPad.DEFAULT_VEL }) {
+    part.notes = part.notes.filter((n) => !(n.step === step && n.key === key));
+    const note = { step, len, key, vel };
+    part.notes.push(note);
+    return note;
+  },
+
+  removeNote(part, note) {
+    const i = part.notes.indexOf(note);
+    if (i !== -1) part.notes.splice(i, 1);
+  },
+
+  /** After a move/resize: drop other notes that now start at the same step & key. */
+  dedupe(part, keep) {
+    part.notes = part.notes.filter((n) => n === keep || !(n.step === keep.step && n.key === keep.key));
+  },
+
   /** Turn the note at (step, key) on or off. Returns true if anything changed. */
-  setNote(part, step, key, on, { len = 1, vel = 1 } = {}) {
+  setNote(part, step, key, on, { len = 1, vel = SoundPad.DEFAULT_VEL } = {}) {
     const existing = this.findNote(part, step, key);
     if (on && !existing) {
       part.notes.push({ step, len, key, vel });
       return true;
     }
     if (!on && existing) {
-      part.notes.splice(part.notes.indexOf(existing), 1);
+      this.removeNote(part, existing);
       return true;
     }
     return false;
@@ -113,56 +237,20 @@ SoundPad.Project = {
     part.notes.length = 0;
   },
 
-  // --- Loading / migration -------------------------------------------
+  // --- Loading -------------------------------------------------------
 
-  /** Turn any saved record (old or new format) into a valid v2 project. */
+  /** Turn a saved record into a valid project (fills missing fields). */
   fromRecord(rec) {
-    const copy = JSON.parse(JSON.stringify(rec || {}));
-    const p = copy.version === this.VERSION ? copy : this._migrateV1(copy);
-    return this._normalize(p);
+    return this._normalize(JSON.parse(JSON.stringify(rec || {})));
   },
 
-  /**
-   * v1 saves stored one loop per instrument as dense booleans:
-   *   { name, bpm, steps, instruments: { drums: {kick:[bool..]}, bass: {"33":[bool..]} } }
-   * (even older: drums-only `pattern`). Each becomes a track with one part,
-   * placed in the first timeline slot.
-   */
-  _migrateV1(rec) {
-    const p = {
-      version: this.VERSION,
-      name: rec.name || "",
-      bpm: rec.bpm || 120,
-      partSteps: rec.steps || this.DEFAULT_PART_STEPS,
-      tracks: [],
-      parts: [],
-      timeline: { slots: this.DEFAULT_SLOTS, cells: {} },
-    };
-    const inst = rec.instruments || { drums: rec.pattern || {}, bass: {} };
-
-    const convert = (type, name, grid, keyOf) => {
-      const track = this.addTrack(p, type, name);
-      const part = this.currentPart(p, track);
-      Object.entries(grid || {}).forEach(([rawKey, row]) => {
-        (row || []).forEach((on, step) => {
-          if (on && step < p.partSteps) part.notes.push({ step, len: 1, key: keyOf(rawKey), vel: 1 });
-        });
-      });
-      p.timeline.cells[track.id][0] = part.id;
-    };
-    convert("drums", "Drums", inst.drums, (k) => k);
-    convert("bass", "Bass", inst.bass, (k) => Number(k));
-    return p;
-  },
-
-  /** Fill in missing fields so the rest of the app can trust the shape. */
   _normalize(p) {
     p.version = this.VERSION;
     p.name = p.name || "";
     p.bpm = p.bpm || 120;
-    p.partSteps = p.partSteps || this.DEFAULT_PART_STEPS;
-    p.tracks = p.tracks || [];
-    p.parts = p.parts || [];
+    p.partSteps = this.PART_LENGTHS.includes(p.partSteps) ? p.partSteps : this.DEFAULT_PART_STEPS;
+    p.tracks = Array.isArray(p.tracks) ? p.tracks : [];
+    p.parts = Array.isArray(p.parts) ? p.parts : [];
     p.timeline = p.timeline || { slots: this.DEFAULT_SLOTS, cells: {} };
     p.timeline.slots = p.timeline.slots || this.DEFAULT_SLOTS;
     p.timeline.cells = p.timeline.cells || {};
@@ -170,7 +258,12 @@ SoundPad.Project = {
     p.parts.forEach((part) => {
       part.notes = (part.notes || [])
         .filter((n) => n.step >= 0 && n.step < p.partSteps)
-        .map((n) => ({ step: n.step, len: n.len || 1, key: n.key, vel: n.vel ?? 1 }));
+        .map((n) => ({
+          step: n.step,
+          len: Math.max(1, Math.min(n.len || 1, p.partSteps - n.step)),
+          key: n.key,
+          vel: n.vel ?? SoundPad.DEFAULT_VEL,
+        }));
     });
 
     p.tracks.forEach((t) => {
@@ -179,7 +272,7 @@ SoundPad.Project = {
       t.mute = !!t.mute;
       t.solo = !!t.solo;
       if (!this.part(p, t.currentPartId)) {
-        const first = p.parts.find((x) => x.trackId === t.id);
+        const first = this.partsOf(p, t.id)[0];
         if (first) t.currentPartId = first.id;
         else this.addPart(p, t.id);
       }

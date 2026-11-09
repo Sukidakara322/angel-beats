@@ -9,9 +9,17 @@
  *   trigger(key, time, durSec, vel)  — key is a drum id or a MIDI number
  *
  * Registry entry:
- *   { label, editor: "<SoundPad view class name>", create(engine, channel) }
+ *   { label, editor: "<SoundPad view class name>", options?, create(engine, channel) }
+ *   `options` is passed to the editor (e.g. the piano-roll note range).
  * ------------------------------------------------------------------ */
 window.SoundPad = window.SoundPad || {};
+
+/**
+ * Velocity: 0..1 per note. DEFAULT_VEL is "normal" and plays at unity
+ * gain, which leaves headroom above it for accents.
+ */
+SoundPad.DEFAULT_VEL = 0.8;
+SoundPad.velToGain = (vel) => Math.max(0, vel) / SoundPad.DEFAULT_VEL;
 
 SoundPad.Instruments = {
   types: {},

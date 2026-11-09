@@ -28,12 +28,33 @@
         <em>BPM</em>
       </label>
 
+      <label class="ctrl" title="Every part in the project has this length, so parts line up on the timeline">
+        <span>Part length</span>
+        <select id="partLen">
+          <option value="16">1 bar</option>
+          <option value="32" selected>2 bars</option>
+          <option value="64">4 bars</option>
+        </select>
+      </label>
+
       <label class="ctrl slider">
         <span>Volume</span>
         <input id="volume" type="range" min="0" max="1" step="0.01" value="0.9" />
       </label>
 
       <span class="hint" id="statusHint">Press ▶ or Space to start · Arm REC then hit pads to record</span>
+    </section>
+
+    <!-- Parts of the active track -->
+    <section class="partbar">
+      <span class="pb-label" id="pbTrack">Parts</span>
+      <div class="pb-chips" id="pbChips"><!-- built by app.js --></div>
+      <div class="pb-actions">
+        <button id="pbNew" class="tbtn small" title="New empty part">+ New</button>
+        <button id="pbDup" class="tbtn small" title="Copy this part">Duplicate</button>
+        <button id="pbRename" class="tbtn small">Rename</button>
+        <button id="pbDelete" class="tbtn small danger">Delete</button>
+      </div>
     </section>
 
     <!-- Track editors (one visible at a time; all tracks play together) -->
@@ -64,8 +85,9 @@
   <script src="js/bass.js"></script>
   <script src="js/project.js"></script>
   <script src="js/player.js"></script>
+  <script src="js/velocity-lane.js"></script>
   <script src="js/drum-view.js"></script>
-  <script src="js/bass-view.js"></script>
+  <script src="js/piano-roll.js"></script>
   <script src="js/store.js"></script>
   <script src="js/app.js"></script>
 </body>
