@@ -4,7 +4,8 @@
  *   • for every track: a Channel (volume/pan), an Instrument (from the
  *     registry) and an editor view, plus a tab in the top bar
  *   • "+ Add track", and the track bar (sound / rename / delete track)
- *   • the Song tab (timeline) and the Pattern / Song play mode
+ *   • the Song tab (timeline). What plays follows the open tab:
+ *     a track tab loops only its open part, the Song tab plays the song
  *   • the shared transport (play / record / tempo / volume / position)
  *   • parts bar, save / load, keyboard routing, playhead drawing
  * The Player decides what to play on each step; views only edit data.
@@ -33,7 +34,6 @@
   const volumeInput = $("volume");
   const statusHint = $("statusHint");
   const posEl = $("position");
-  const modeBtns = document.querySelectorAll(".mode-toggle [data-mode]");
   const seqNameInput = $("seqName");
   const saveBtn = $("saveBtn");
   const libListEl = $("libList");
@@ -42,6 +42,7 @@
   const songTab = $("songTab");
   const viewsEl = $("views");
   const songRoot = $("songView");
+  const stageEl = $("stage");
   const partBarEl = $("partBar");
   const pbTrackEl = $("pbTrack");
   const pbChipsEl = $("pbChips");
@@ -55,8 +56,11 @@
   const tbDelete = $("tbDelete");
   const addTrackBtn = $("addTrackBtn");
   const addMenu = $("addMenu");
+  const audioWarn = $("audioWarn");
+  const audioWarnText = $("audioWarnText");
+  const audioRestart = $("audioRestart");
 
-  const IDLE_HINT = "Press ▶ or Space to start · Arm REC then play to record";
+  const IDLE_HINT = "▶ / Space plays the open tab: a track's part, or the whole song";
 
   const rtOf = (trackId) => rts.find((rt) => rt.track.id === trackId);
   const activeRt = () => rtOf(active);
@@ -122,7 +126,7 @@
       root.appendChild(editorRoot);
       const View = SoundPad[def.editor];
       const options = def.editorOptions ? def.editorOptions(track) : {};
-      const view = new View({ engine, root: editorRoot, project, track, instrument, options });
+      const view = new View({ engine, player, root: editorRoot, project, track, instrument, options });
       view.build();
 
       const tab = document.createElement("button");
@@ -161,6 +165,7 @@
     active = id;
     const song = id === SONG;
     songTab.classList.toggle("active", song);
+    stageEl.classList.toggle("wide", song);      // the timeline uses the full window width
     songRoot.classList.toggle("hidden", !song);
     partBarEl.classList.toggle("hidden", song);
     viewsEl.classList.toggle("hidden", song);
@@ -169,13 +174,11 @@
       rt.tab.classList.toggle("active", on);
       rt.root.classList.toggle("hidden", !on);
     });
-    if (song) {
-      songView.render();   // parts may have been added/renamed in the editors
-      setMode("song");
-    } else {
-      renderPartBar();
-      setMode("pattern");
-    }
+    // What plays follows the tab: a track tab loops only its open part, the Song tab plays the song.
+    player.setMode(song ? "song" : "pattern", song ? null : id);
+    clearPlayheads();
+    if (song) songView.render();   // parts may have been added/renamed in the editors
+    else renderPartBar();
     applyRecordArm();      // record arming follows the visible track
   }
 
@@ -186,21 +189,51 @@
     rtOf(trackId).view.refresh();
   }
 
-  function setMode(mode) {
-    player.setMode(mode);
-    modeBtns.forEach((b) => b.classList.toggle("on", b.dataset.mode === player.mode));
-    if (!engine.isPlaying) showPosition(null);
+  // --- Audio problems ------------------------------------------------
+
+  const PROBLEM_TEXT = {
+    error: (m) => `A note failed to play (${m}). Playback goes on — if it sounds wrong, restart audio.`,
+    suspended: (m) => `No sound: ${m}. Trying to resume — if it stays silent, restart audio.`,
+    stalled: (m) => `No sound: ${m} (output device changed or busy?). Restart audio to get it back.`,
+    invalid: (m) => `No sound: ${m}. Restart audio to get it back.`,
+  };
+
+  engine.onProblem = (kind, message) => {
+    if (!kind) { audioWarn.classList.add("hidden"); return; }   // recovered on its own
+    audioWarnText.textContent = (PROBLEM_TEXT[kind] || PROBLEM_TEXT.error)(message);
+    audioWarn.classList.remove("hidden");
+  };
+
+  /** New audio context + every track's instrument rebuilt on it. The song itself is untouched. */
+  async function restartAudio() {
+    audioRestart.disabled = true;
+    showStopped();
+    await engine.restart();
+    mountProject(project);
+    audioWarn.classList.add("hidden");
+    audioRestart.disabled = false;
+    const rt = activeRt();
+    if (rt) previewSound(rt);           // proof it's back
   }
+  audioRestart.addEventListener("click", restartAudio);
+
+  // Errors outside the scheduler (note previews, live keys…) are shown too, not just logged.
+  window.addEventListener("error", (e) => engine._report("error", e.message || "script error"));
+  window.addEventListener("unhandledrejection", (e) => engine._report("error", (e.reason && e.reason.message) || String(e.reason)));
 
   // --- Transport ----------------------------------------------------
+
+  function showStopped() {
+    engine.stop();
+    playBtn.textContent = "▶";
+    playBtn.classList.remove("on");
+    clearPlayheads();
+  }
 
   async function togglePlay() {
     await engine.init();
     if (engine.isPlaying) {
-      engine.stop();
-      playBtn.textContent = "▶";
-      playBtn.classList.remove("on");
-      clearPlayheads();
+      showStopped();
     } else {
       player.sync();
       engine.start();
@@ -378,6 +411,8 @@
   function partChanged() {
     activeRt().view.refresh();
     renderPartBar();
+    player.sync();                              // the loop is now this part's length
+    if (!engine.isPlaying) showPosition(null);  // its name is in the position box
   }
 
   function selectPart(partId) {
@@ -481,7 +516,7 @@
 
   // --- Playhead + position (decoupled from audio clock) --------------
 
-  /** "Song · Bar 5 · 2" from the player's info (null = stopped). */
+  /** "Song · Bar 5 · 2" or "Drums 1 · Bar 2 · 3" (the looping part) from the player's info (null = stopped). */
   function showPosition(info) {
     const song = player.mode === "song";
     let step;
@@ -489,7 +524,9 @@
     else step = song ? P.songRange(project).start : 0;
     const bar = Math.floor(step / P.BAR) + 1;
     const beat = Math.floor((step % P.BAR) / 4) + 1;
-    posEl.textContent = `${song ? "Song" : "Pattern"} · Bar ${bar} · ${beat}`;
+    const what = song ? "Song" : player.patternPart()?.name || "Part";
+    posEl.textContent = `${what} · Bar ${bar} · ${beat}`;
+    posEl.title = song ? "Playing the whole song" : `Playing only "${what}" (this track's open part)`;
   }
 
   function clearPlayheads() {
@@ -518,7 +555,6 @@
   recBtn.addEventListener("click", toggleRecord);
   clearBtn.addEventListener("click", clearActive);
   songTab.addEventListener("click", () => setActive(SONG));
-  modeBtns.forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
 
   bpmInput.addEventListener("change", () => {
     engine.setBpm(parseInt(bpmInput.value, 10));

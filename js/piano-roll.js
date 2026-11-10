@@ -21,8 +21,9 @@
 window.SoundPad = window.SoundPad || {};
 
 SoundPad.PianoRollView = class PianoRollView {
-  constructor({ engine, root, project, track, instrument, options = {} }) {
+  constructor({ engine, player, root, project, track, instrument, options = {} }) {
     this.engine = engine;
+    this.player = player;
     this.root = root;
     this.project = project;
     this.track = track;
@@ -464,9 +465,11 @@ SoundPad.PianoRollView = class PianoRollView {
     this.synth.trigger(midi, now, this.synth.liveDur || 0.25);
     this._flashKey(midi);
     if (this.recordArmed && this.engine.isPlaying && midi >= this.LOW && midi <= this.HIGH) {
-      const step = this.engine.quantizeToStep(now) % SoundPad.Project.partLength(this.part);
-      SoundPad.Project.addNote(this.part, { step, key: midi, len: 1 });
-      this._changed();
+      const step = this.player.localStep(this.track, this.engine.quantizeToStep(now));
+      if (step >= 0) {
+        SoundPad.Project.addNote(this.part, { step, key: midi, len: 1 });
+        this._changed();
+      }
     }
   }
 

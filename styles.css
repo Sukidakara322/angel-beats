@@ -60,6 +60,8 @@ html, body {
   flex-direction: column;
   gap: 22px;
 }
+/* Song tab: the timeline gets the whole window width. */
+.stage.wide { max-width: none; }
 
 /* ---------- Transport ---------- */
 .transport {
@@ -154,14 +156,16 @@ html, body {
 .partbar.hidden, #songView.hidden, #views.hidden { display: none; }
 .roll-scroll { scrollbar-color: #39424f transparent; }
 
-/* ---------- Mode toggle + position ---------- */
-.mode-toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-.mode-toggle button {
-  padding: 9px 12px; font-size: 13px; cursor: pointer;
-  background: var(--panel-2); color: var(--muted); border: 0;
+/* ---------- Audio problem banner (inside the transport, full row) ---------- */
+.audio-warn {
+  flex-basis: 100%; display: flex; align-items: center; gap: 12px;
+  padding: 8px 12px; font-size: 13px; color: #ffd2d2;
+  background: rgba(255, 93, 93, 0.12); border: 1px solid var(--accent); border-radius: 8px;
 }
-.mode-toggle button + button { border-left: 1px solid var(--line); }
-.mode-toggle button.on { background: var(--playhead); color: #0e1116; font-weight: 600; }
+.audio-warn.hidden { display: none; }
+.audio-warn span { flex: 1; }
+
+/* ---------- Position ---------- */
 .position {
   min-width: 150px; padding: 8px 10px; font-size: 13px; text-align: center;
   font-variant-numeric: tabular-nums; color: var(--text);
@@ -206,6 +210,8 @@ html, body {
 /* Lanes */
 .tl-lane-head {
   box-sizing: border-box; padding: 6px 8px;
+  display: flex; flex-direction: column; justify-content: center;   /* centred in tall lanes */
+  overflow: hidden;
   border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2);
 }
 .tl-lane-head.silent { opacity: 0.55; }
@@ -222,7 +228,7 @@ html, body {
 }
 .ms.mute.on { background: var(--accent); color: #fff; border-color: var(--accent); }
 .ms.solo.on { background: #e6d35a; color: #0e1116; border-color: #e6d35a; }
-.hint { margin-left: auto; font-size: 12px; color: var(--muted); max-width: 320px; }
+.hint { margin-left: auto; font-size: 12px; color: var(--muted); max-width: 400px; }
 
 /* ---------- Instrument views ---------- */
 .inst-view, .inst-editor { display: flex; flex-direction: column; gap: 22px; }

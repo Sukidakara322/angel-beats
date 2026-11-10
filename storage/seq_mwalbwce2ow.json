@@ -1,0 +1,259 @@
+{
+  "version": 3,
+  "name": "Nice drums",
+  "bpm": 120,
+  "tracks": [
+    {
+      "id": "trk_mwal3f7s5l1cy",
+      "name": "Drums",
+      "type": "drums",
+      "preset": "hard",
+      "params": {},
+      "volume": 1,
+      "pan": 0,
+      "mute": false,
+      "solo": false,
+      "currentPartId": "prt_mwal3f7seenw9"
+    },
+    {
+      "id": "trk_mwal3f7s1w8l0",
+      "name": "Bass",
+      "type": "synth",
+      "preset": "growl-bass",
+      "params": {},
+      "volume": 1,
+      "pan": 0,
+      "mute": false,
+      "solo": false,
+      "currentPartId": "prt_mwal3f7s1umjv"
+    },
+    {
+      "id": "trk_mwala1wiw5z8i",
+      "name": "Whistle Lead",
+      "type": "synth",
+      "preset": "whistle-lead",
+      "params": {},
+      "volume": 1,
+      "pan": 0,
+      "mute": false,
+      "solo": false,
+      "currentPartId": "prt_mwala1wimrykf"
+    }
+  ],
+  "parts": [
+    {
+      "id": "prt_mwal3f7seenw9",
+      "trackId": "trk_mwal3f7s5l1cy",
+      "name": "Drums 1",
+      "minLength": 0,
+      "notes": [
+        {
+          "step": 0,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 2,
+          "len": 1,
+          "key": "ltom",
+          "vel": 0.8
+        },
+        {
+          "step": 3,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 5,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 6,
+          "len": 1,
+          "key": "ltom",
+          "vel": 0.8
+        },
+        {
+          "step": 8,
+          "len": 1,
+          "key": "ltom",
+          "vel": 0.8
+        },
+        {
+          "step": 10,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 11,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 12,
+          "len": 1,
+          "key": "ltom",
+          "vel": 0.8
+        },
+        {
+          "step": 14,
+          "len": 1,
+          "key": "ltom",
+          "vel": 0.8
+        },
+        {
+          "step": 15,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 14,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 1,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 4,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 5,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 7,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 8,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 11,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 13,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 1,
+          "len": 1,
+          "key": "hat",
+          "vel": 0.8
+        },
+        {
+          "step": 7,
+          "len": 1,
+          "key": "hat",
+          "vel": 0.8
+        },
+        {
+          "step": 9,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 10,
+          "len": 1,
+          "key": "hat",
+          "vel": 0.8
+        },
+        {
+          "step": 13,
+          "len": 1,
+          "key": "hat",
+          "vel": 0.8
+        },
+        {
+          "step": 15,
+          "len": 1,
+          "key": "snare",
+          "vel": 0.8
+        },
+        {
+          "step": 0,
+          "len": 1,
+          "key": "snare",
+          "vel": 0.8
+        },
+        {
+          "step": 3,
+          "len": 1,
+          "key": "snare",
+          "vel": 0.8
+        },
+        {
+          "step": 6,
+          "len": 1,
+          "key": "snare",
+          "vel": 0.8
+        },
+        {
+          "step": 10,
+          "len": 1,
+          "key": "snare",
+          "vel": 0.8
+        },
+        {
+          "step": 12,
+          "len": 1,
+          "key": "snare",
+          "vel": 0.8
+        },
+        {
+          "step": 9,
+          "len": 1,
+          "key": "crash",
+          "vel": 0.8
+        }
+      ]
+    },
+    {
+      "id": "prt_mwal3f7s1umjv",
+      "trackId": "trk_mwal3f7s1w8l0",
+      "name": "Bass 1",
+      "minLength": 0,
+      "notes": []
+    },
+    {
+      "id": "prt_mwala1wimrykf",
+      "trackId": "trk_mwala1wiw5z8i",
+      "name": "Whistle Lead 1",
+      "minLength": 0,
+      "notes": []
+    }
+  ],
+  "timeline": {
+    "clips": [],
+    "loop": null
+  },
+  "id": "seq_mwalbwce2ow",
+  "savedAt": 1794309133694
+}

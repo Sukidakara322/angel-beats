@@ -31,11 +31,18 @@ SoundPad.Engine = class Engine {
     this._timer = null;
     this.onStep = null;            // (stepIndex, time) => info, set by app
     this.drawQueue = [];           // {step, time, info} pushed for UI playhead
+
+    // Audio health (see _watch): the app shows a warning + "Restart audio".
+    this.onProblem = null;         // (kind, message) => void, set by app
+    this._watchTimer = null;
   }
 
   /** Must be called from a user gesture (browsers block audio otherwise). */
   async init() {
-    if (this.ctx) { await this.ctx.resume(); return; }
+    if (this.ctx) {
+      if (this.ctx.state !== "running") await this.ctx.resume().catch(() => {});
+      return;
+    }
     const Ctx = window.AudioContext || window.webkitAudioContext;
     this.ctx = new Ctx();
     this.master = this.ctx.createGain();
@@ -51,8 +58,74 @@ SoundPad.Engine = class Engine {
     this.limiter.release.value = 0.25;
 
     this.master.connect(this.limiter).connect(this.ctx.destination);
+    // A tap on the output, only to check the signal is still valid (see _watch).
+    this._tap = this.ctx.createAnalyser();
+    this._tap.fftSize = 2048;
+    this._tapBuf = new Float32Array(this._tap.fftSize);
+    this.limiter.connect(this._tap);
+
     this._buildNoiseBuffer();
-    if (this.ctx.state === "suspended") await this.ctx.resume();
+    if (this.ctx.state === "suspended") await this.ctx.resume().catch(() => {});
+    this._lastClock = { t: this.ctx.currentTime, at: performance.now() };
+    this._watchTimer = setInterval(() => this._watch(), 500);
+  }
+
+  /**
+   * Throw the audio context away and start a new one (the app then rebuilds
+   * every track's instrument on it). The cure for a dead output: a stalled
+   * audio device, or an invalid (NaN) signal stuck in the limiter.
+   */
+  async restart() {
+    this.stop();
+    clearInterval(this._watchTimer);
+    this._watchTimer = null;
+    this._reported = new Set();
+    this._suspendedKey = null;
+    const old = this.ctx;
+    this.ctx = this.master = this.limiter = this._tap = this.noiseBuffer = null;
+    if (old) await old.close().catch(() => {});
+    await this.init();
+  }
+
+  /** Tell the app about a problem — once per `key` (e.g. once per failing track) until a restart. */
+  _report(kind, message, key = kind + message) {
+    this._reported = this._reported || new Set();
+    if (this._reported.has(key)) return;
+    this._reported.add(key);
+    if (kind === "suspended") this._suspendedKey = key;
+    console.error(`[Sound Pad audio] ${kind}: ${message}`);
+    if (this.onProblem) this.onProblem(kind, message);
+  }
+
+  /**
+   * Audio health check, twice a second:
+   *  • context suspended/interrupted (device change, OS) → try to resume
+   *  • clock not moving although "running" → the output device stalled
+   *  • NaN/Infinity in the output → a bad signal latched the limiter (silence)
+   */
+  _watch() {
+    const ctx = this.ctx;
+    if (!ctx || ctx.state === "closed") return;
+    if (ctx.state !== "running") {
+      ctx.resume().catch(() => {});
+      if (this.isPlaying) this._report("suspended", `the browser paused audio output (state: ${ctx.state})`);
+      return;
+    }
+    const now = performance.now();
+    if (ctx.currentTime !== this._lastClock.t) this._lastClock = { t: ctx.currentTime, at: now };
+    else if (now - this._lastClock.at > 1500 && !document.hidden) {
+      this._report("stalled", "the audio device stopped responding");
+      return;
+    }
+    this._tap.getFloatTimeDomainData(this._tapBuf);
+    for (let i = 0; i < this._tapBuf.length; i += 8) {
+      if (!Number.isFinite(this._tapBuf[i])) { this._report("invalid", "an invalid signal (NaN) reached the output"); return; }
+    }
+    if (this._suspendedKey) {             // resumed on its own: all clear
+      this._reported.delete(this._suspendedKey);
+      this._suspendedKey = null;
+      if (this.onProblem) this.onProblem(null);
+    }
   }
 
   setVolume(v) {
@@ -94,7 +167,14 @@ SoundPad.Engine = class Engine {
   _scheduler() {
     while (this.nextNoteTime < this.ctx.currentTime + this.scheduleAheadSec) {
       // onStep may return position info for the UI (and may change loopSteps).
-      const info = this.onStep ? this.onStep(this.currentStep, this.nextNoteTime) : null;
+      // An error must never stop the clock: without this, the same step would
+      // be retried (and fail) forever and the whole app would go silent.
+      let info = null;
+      try {
+        info = this.onStep ? this.onStep(this.currentStep, this.nextNoteTime) : null;
+      } catch (err) {
+        this._report("error", err && err.message ? err.message : String(err));
+      }
       this.drawQueue.push({ step: this.currentStep, time: this.nextNoteTime, info });
       this.nextNoteTime += this.secondsPerStep();
       this.currentStep = (this.currentStep + 1) % this.loopSteps;

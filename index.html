@@ -26,11 +26,7 @@
       <button id="recBtn" class="tbtn rec" title="Arm recording (R)">● REC</button>
       <button id="clearBtn" class="tbtn" title="Clear the open part (or the timeline in Song)">Clear</button>
 
-      <div class="mode-toggle" title="Pattern: loop the open parts · Song: play the timeline">
-        <button data-mode="pattern" class="on">Pattern</button>
-        <button data-mode="song">Song</button>
-      </div>
-      <span class="position" id="position">Pattern · Bar 1 · 1</span>
+      <span class="position" id="position">Bar 1 · 1</span>
 
       <label class="ctrl">
         <span>Tempo</span>
@@ -43,7 +39,11 @@
         <input id="volume" type="range" min="0" max="1" step="0.01" value="0.9" />
       </label>
 
-      <span class="hint" id="statusHint">Press ▶ or Space to start · Arm REC then hit pads to record</span>
+      <span class="hint" id="statusHint"><!-- set by app.js --></span>
+      <div class="audio-warn hidden" id="audioWarn" role="alert">
+        <span id="audioWarnText"></span>
+        <button id="audioRestart" class="tbtn small">Restart audio</button>
+      </div>
     </section>
 
     <!-- Active track: its sound + its parts -->

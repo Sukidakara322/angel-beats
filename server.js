@@ -99,7 +99,12 @@ function serveStatic(req, res) {
       res.writeHead(404).end("Not found");
       return;
     }
-    res.writeHead(200, { "Content-Type": MIME[path.extname(filePath)] || "application/octet-stream" });
+    res.writeHead(200, {
+      "Content-Type": MIME[path.extname(filePath)] || "application/octet-stream",
+      // The app is edited while it runs: never let the browser reuse an old copy of a
+      // file, or it can end up mixing old and new scripts (e.g. an old app.js with a new player.js).
+      "Cache-Control": "no-store",
+    });
     res.end(data);
   });
 }

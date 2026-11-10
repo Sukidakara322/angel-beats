@@ -1,0 +1,511 @@
+{
+  "version": 3,
+  "name": "Something",
+  "bpm": 120,
+  "tracks": [
+    {
+      "id": "trk_mwalyr3r5pucz",
+      "name": "Drums",
+      "type": "drums",
+      "preset": "hard",
+      "params": {},
+      "volume": 1,
+      "pan": 0,
+      "mute": false,
+      "solo": false,
+      "currentPartId": "prt_mwalyr3rv2d4s"
+    },
+    {
+      "id": "trk_mwalyr3rihios",
+      "name": "Bass",
+      "type": "synth",
+      "preset": "growl-bass",
+      "params": {},
+      "volume": 1,
+      "pan": 0,
+      "mute": false,
+      "solo": false,
+      "currentPartId": "prt_mwalyr3rek8k9"
+    },
+    {
+      "id": "trk_mwamssh8vyckb",
+      "name": "Rock Pick Bass",
+      "type": "bass-guitar",
+      "preset": "pick-bass",
+      "params": {
+        "dirt": "fuzz",
+        "style": "pick",
+        "pickup": "both",
+        "dist": true,
+        "mid": 2,
+        "comp": 0.5,
+        "sustain": 0.55
+      },
+      "volume": 1,
+      "pan": 0,
+      "mute": false,
+      "solo": false,
+      "currentPartId": "prt_mwamssh8kgmgx"
+    },
+    {
+      "id": "trk_mwamzgnwn1r2j",
+      "name": "Whistle Lead",
+      "type": "synth",
+      "preset": "whistle-lead",
+      "params": {},
+      "volume": 1,
+      "pan": 0,
+      "mute": false,
+      "solo": false,
+      "currentPartId": "prt_mwamzgnxhfabr"
+    },
+    {
+      "id": "trk_mwan93j027h5t",
+      "name": "Rock Lead",
+      "type": "guitar",
+      "preset": "rock-lead",
+      "params": {
+        "pickup": "middle"
+      },
+      "volume": 1,
+      "pan": 0,
+      "mute": false,
+      "solo": false,
+      "currentPartId": "prt_mwan93j0bzjfq"
+    }
+  ],
+  "parts": [
+    {
+      "id": "prt_mwalyr3rv2d4s",
+      "trackId": "trk_mwalyr3r5pucz",
+      "name": "Drums 1",
+      "minLength": 0,
+      "notes": []
+    },
+    {
+      "id": "prt_mwalyr3rek8k9",
+      "trackId": "trk_mwalyr3rihios",
+      "name": "Bass 1",
+      "minLength": 0,
+      "notes": [
+        {
+          "step": 3,
+          "len": 1,
+          "key": 62,
+          "vel": 0.8
+        },
+        {
+          "step": 2,
+          "len": 1,
+          "key": 67,
+          "vel": 0.8
+        },
+        {
+          "step": 5,
+          "len": 1,
+          "key": 65,
+          "vel": 0.8
+        },
+        {
+          "step": 7,
+          "len": 1,
+          "key": 60,
+          "vel": 0.8
+        },
+        {
+          "step": 9,
+          "len": 1,
+          "key": 62,
+          "vel": 0.8
+        },
+        {
+          "step": 11,
+          "len": 1,
+          "key": 69,
+          "vel": 0.8
+        },
+        {
+          "step": 0,
+          "len": 1,
+          "key": 69,
+          "vel": 0.8
+        },
+        {
+          "step": 1,
+          "len": 1,
+          "key": 64,
+          "vel": 0.8
+        },
+        {
+          "step": 13,
+          "len": 1,
+          "key": 67,
+          "vel": 0.8
+        },
+        {
+          "step": 15,
+          "len": 1,
+          "key": 62,
+          "vel": 0.8
+        },
+        {
+          "step": 8,
+          "len": 1,
+          "key": 67,
+          "vel": 0.8
+        },
+        {
+          "step": 12,
+          "len": 1,
+          "key": 60,
+          "vel": 0.8
+        }
+      ]
+    },
+    {
+      "id": "prt_mwamssh8kgmgx",
+      "trackId": "trk_mwamssh8vyckb",
+      "name": "Rock Pick Bass 1",
+      "minLength": 32,
+      "notes": [
+        {
+          "step": 0,
+          "len": 1,
+          "key": 28,
+          "vel": 0.8
+        },
+        {
+          "step": 2,
+          "len": 1,
+          "key": 28,
+          "vel": 0.8
+        },
+        {
+          "step": 3,
+          "len": 1,
+          "key": 28,
+          "vel": 0.8
+        },
+        {
+          "step": 5,
+          "len": 1,
+          "key": 33,
+          "vel": 0.8
+        },
+        {
+          "step": 6,
+          "len": 1,
+          "key": 33,
+          "vel": 0.8
+        },
+        {
+          "step": 7,
+          "len": 1,
+          "key": 33,
+          "vel": 0.8
+        },
+        {
+          "step": 4,
+          "len": 1,
+          "key": 33,
+          "vel": 0.8
+        },
+        {
+          "step": 8,
+          "len": 1,
+          "key": 26,
+          "vel": 0.8
+        },
+        {
+          "step": 9,
+          "len": 1,
+          "key": 26,
+          "vel": 0.8
+        },
+        {
+          "step": 11,
+          "len": 1,
+          "key": 26,
+          "vel": 0.8
+        },
+        {
+          "step": 13,
+          "len": 1,
+          "key": 31,
+          "vel": 0.8
+        },
+        {
+          "step": 15,
+          "len": 1,
+          "key": 31,
+          "vel": 0.8
+        },
+        {
+          "step": 19,
+          "len": 1,
+          "key": 35,
+          "vel": 0.8
+        },
+        {
+          "step": 24,
+          "len": 1,
+          "key": 27,
+          "vel": 0.8
+        },
+        {
+          "step": 27,
+          "len": 1,
+          "key": 27,
+          "vel": 0.8
+        },
+        {
+          "step": 30,
+          "len": 1,
+          "key": 27,
+          "vel": 0.8
+        },
+        {
+          "step": 31,
+          "len": 1,
+          "key": 31,
+          "vel": 0.8
+        },
+        {
+          "step": 21,
+          "len": 1,
+          "key": 35,
+          "vel": 0.8
+        },
+        {
+          "step": 18,
+          "len": 1,
+          "key": 33,
+          "vel": 0.8
+        },
+        {
+          "step": 23,
+          "len": 1,
+          "key": 24,
+          "vel": 0.8
+        }
+      ]
+    },
+    {
+      "id": "prt_mwamzgnxhfabr",
+      "trackId": "trk_mwamzgnwn1r2j",
+      "name": "Whistle Lead 1",
+      "minLength": 0,
+      "notes": [
+        {
+          "step": 0,
+          "len": 1,
+          "key": 74,
+          "vel": 0.8
+        },
+        {
+          "step": 2,
+          "len": 2,
+          "key": 74,
+          "vel": 0.8
+        },
+        {
+          "step": 5,
+          "len": 1,
+          "key": 76,
+          "vel": 0.8
+        },
+        {
+          "step": 7,
+          "len": 2,
+          "key": 76,
+          "vel": 0.8
+        },
+        {
+          "step": 9,
+          "len": 1,
+          "key": 72,
+          "vel": 0.8
+        },
+        {
+          "step": 11,
+          "len": 1,
+          "key": 74,
+          "vel": 0.8
+        },
+        {
+          "step": 13,
+          "len": 1,
+          "key": 76,
+          "vel": 0.8
+        },
+        {
+          "step": 14,
+          "len": 2,
+          "key": 74,
+          "vel": 0.8
+        },
+        {
+          "step": 1,
+          "len": 2,
+          "key": 77,
+          "vel": 0.8
+        },
+        {
+          "step": 1,
+          "len": 2,
+          "key": 71,
+          "vel": 0.8
+        },
+        {
+          "step": 5,
+          "len": 2,
+          "key": 72,
+          "vel": 0.8
+        },
+        {
+          "step": 10,
+          "len": 1,
+          "key": 78,
+          "vel": 0.8
+        },
+        {
+          "step": 13,
+          "len": 2,
+          "key": 79,
+          "vel": 0.8
+        }
+      ]
+    },
+    {
+      "id": "prt_mwan93j0bzjfq",
+      "trackId": "trk_mwan93j027h5t",
+      "name": "Rock Lead 1",
+      "minLength": 32,
+      "notes": [
+        {
+          "step": 0,
+          "len": 2,
+          "key": 40,
+          "vel": 0.8
+        },
+        {
+          "step": 2,
+          "len": 3,
+          "key": 45,
+          "vel": 0.8
+        },
+        {
+          "step": 4,
+          "len": 2,
+          "key": 41,
+          "vel": 0.8
+        },
+        {
+          "step": 5,
+          "len": 3,
+          "key": 43,
+          "vel": 0.8
+        },
+        {
+          "step": 8,
+          "len": 2,
+          "key": 40,
+          "vel": 0.8
+        },
+        {
+          "step": 10,
+          "len": 1,
+          "key": 43,
+          "vel": 0.8
+        },
+        {
+          "step": 11,
+          "len": 2,
+          "key": 41,
+          "vel": 0.8
+        },
+        {
+          "step": 13,
+          "len": 2,
+          "key": 45,
+          "vel": 0.8
+        },
+        {
+          "step": 15,
+          "len": 1,
+          "key": 40,
+          "vel": 0.8
+        },
+        {
+          "step": 14,
+          "len": 2,
+          "key": 41,
+          "vel": 0.8
+        },
+        {
+          "step": 16,
+          "len": 2,
+          "key": 40,
+          "vel": 0.8
+        },
+        {
+          "step": 18,
+          "len": 3,
+          "key": 45,
+          "vel": 0.8
+        },
+        {
+          "step": 20,
+          "len": 2,
+          "key": 41,
+          "vel": 0.8
+        },
+        {
+          "step": 21,
+          "len": 3,
+          "key": 43,
+          "vel": 0.8
+        },
+        {
+          "step": 24,
+          "len": 2,
+          "key": 40,
+          "vel": 0.8
+        },
+        {
+          "step": 26,
+          "len": 2,
+          "key": 40,
+          "vel": 0.8
+        },
+        {
+          "step": 30,
+          "len": 2,
+          "key": 43,
+          "vel": 0.8
+        }
+      ]
+    }
+  ],
+  "timeline": {
+    "clips": [
+      {
+        "id": "clp_mwamz61hsc9gq",
+        "trackId": "trk_mwamssh8vyckb",
+        "partId": "prt_mwamssh8kgmgx",
+        "start": 0,
+        "length": null
+      },
+      {
+        "id": "clp_mwaneovqidtqz",
+        "trackId": "trk_mwan93j027h5t",
+        "partId": "prt_mwan93j0bzjfq",
+        "start": 12,
+        "length": null
+      }
+    ],
+    "loop": null
+  },
+  "id": "seq_mwao55sc2rd",
+  "savedAt": 1794313858188
+}

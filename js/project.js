@@ -299,6 +299,19 @@ SoundPad.Project = {
     return hit;
   },
 
+  /**
+   * Song step where `clip` stops sounding, seen from `step` (a step it is
+   * playing): its own end, or where a later-starting clip on the same lane
+   * takes over — whichever comes first. Notes are cut there.
+   */
+  clipStopAt(p, clip, step) {
+    let stop = clip.start + this.clipLength(p, clip);
+    for (const c of p.timeline.clips) {
+      if (c !== clip && c.trackId === clip.trackId && c.start > step && c.start < stop) stop = c.start;
+    }
+    return stop;
+  },
+
   /** Step just past the end of the last clip (0 for an empty song). */
   songEnd(p) {
     let end = 0;

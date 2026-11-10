@@ -19,6 +19,12 @@
  *   clicking a clip         → also makes its part the lane's selected part
  *   drag on the ruler       → set the loop region; click it to clear
  *   Shift + wheel / scrollbar → scroll · Ctrl + wheel / − + → zoom
+ *   Fit song                → zoom out/in so the whole song is visible
+ *   Lanes: Auto             → lane height fits all lanes into the window
+ *
+ * The Song tab gets the full window width (.stage.wide). Zoom, snap and
+ * lane size are kept in SongView.prefs (+ localStorage), so they survive
+ * the rebuild that happens when a track is added or a project is loaded.
  *
  * Overlapping clips in one lane: the one that starts later plays.
  * ------------------------------------------------------------------ */
@@ -52,11 +58,21 @@ SoundPad.SongView = class SongView {
     this.onPickPart = onPickPart || (() => {});
 
     this.RULER_H = 30;
-    this.LANE_H = 60;
-    this.ZOOMS = [1, 1.5, 2, 3, 4, 6, 8, 12];   // pixels per step
-    this.zoomIdx = 4;
-    this.snap = "auto";      // "auto" (follows zoom) or a fixed step count: 16 bar, 4 beat, 1 step
-    this.scrollX = 0;
+    // Lane height: "auto" fits all lanes into the window (within MIN..MAX), or a fixed size.
+    this.LANE_SIZES = { auto: 0, s: 56, m: 80, l: 112, xl: 150 };
+    this.LANE_MIN = 56;
+    this.LANE_MAX = 150;
+    this.LANE_H = 80;
+    this.ZOOMS = [0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24];   // pixels per step
+
+    // View settings outlive this instance (it's rebuilt when tracks change).
+    const pr = SoundPad.SongView.prefs;
+    const z = this.ZOOMS.indexOf(pr.zoom);
+    this.zoomIdx = z >= 0 ? z : this.ZOOMS.indexOf(4);
+    this.snap = ["auto", 16, 4, 1].includes(pr.snap) ? pr.snap : "auto";   // "auto" follows zoom, or 16 bar / 4 beat / 1 step
+    this.laneSize = pr.laneSize in this.LANE_SIZES ? pr.laneSize : "auto";
+    this.scrollX = pr.scrollX || 0;
+
     this.W = 0;
     this.playStep = -1;
     this.drag = null;
@@ -65,6 +81,13 @@ SoundPad.SongView = class SongView {
 
   get P() { return SoundPad.Project; }
   get pps() { return this.ZOOMS[this.zoomIdx]; }
+
+  /** Remember zoom / snap / lane size (and, for this session, the scroll position). */
+  _savePrefs() {
+    const keep = { zoom: this.pps, snap: this.snap, laneSize: this.laneSize };
+    SoundPad.SongView.prefs = { ...keep, scrollX: this.scrollX };
+    try { localStorage.setItem("soundpad.songView", JSON.stringify(keep)); } catch { /* storage blocked */ }
+  }
 
   /** Snap unit in steps for the current zoom when snap is Auto: the finest grid that's ≥ 8 px wide. */
   get autoSnap() {
@@ -98,9 +121,19 @@ SoundPad.SongView = class SongView {
                 <option value="1">Off · 1/16</option>
               </select>
             </label>
+            <label class="mini-ctrl" title="Lane height. Auto fits every lane into the window.">Lanes
+              <select data-role="lanes">
+                <option value="auto">Auto · fit</option>
+                <option value="s">Small</option>
+                <option value="m">Medium</option>
+                <option value="l">Large</option>
+                <option value="xl">Huge</option>
+              </select>
+            </label>
             <div class="zoom">
               <button class="tbtn small" data-act="zoomOut" title="Zoom out (Ctrl + wheel)">−</button>
               <button class="tbtn small" data-act="zoomIn" title="Zoom in (Ctrl + wheel)">+</button>
+              <button class="tbtn small" data-act="fit" title="Zoom to show the whole song">Fit song</button>
             </div>
             <button class="tbtn small" data-act="unloop" title="Play the whole song">Clear loop</button>
           </div>
@@ -128,11 +161,20 @@ SoundPad.SongView = class SongView {
     snapSel.value = String(this.snap);
     snapSel.addEventListener("change", () => {
       this.snap = snapSel.value === "auto" ? "auto" : parseInt(snapSel.value, 10);
+      this._savePrefs();
       this.draw();
+    });
+    const lanesSel = q("lanes");
+    lanesSel.value = this.laneSize;
+    lanesSel.addEventListener("change", () => {
+      this.laneSize = lanesSel.value;
+      this._savePrefs();
+      this._resize();
     });
     this._updateAutoLabel();
     this.root.querySelector('[data-act="zoomIn"]').addEventListener("click", () => this.zoom(1));
     this.root.querySelector('[data-act="zoomOut"]').addEventListener("click", () => this.zoom(-1));
+    this.root.querySelector('[data-act="fit"]').addEventListener("click", () => this.fitSong());
     this.unloopBtn = this.root.querySelector('[data-act="unloop"]');
     this.unloopBtn.addEventListener("click", () => { this.P.clearLoop(this.project); this.render(); });
 
@@ -147,11 +189,15 @@ SoundPad.SongView = class SongView {
     c.addEventListener("wheel", (e) => this._onWheel(e), { passive: false });
     this.hbar.addEventListener("scroll", () => {
       this.scrollX = this.hbar.scrollLeft;
+      SoundPad.SongView.prefs.scrollX = this.scrollX;
       this.draw();
     });
 
     this._ro = new ResizeObserver(() => this._resize());
     this._ro.observe(this.mainEl);
+    // Window height changes don't resize the timeline's box, but Auto lanes follow them.
+    this._onWinResize = () => this._resize();
+    window.addEventListener("resize", this._onWinResize);
     this.render();
   }
 
@@ -167,6 +213,11 @@ SoundPad.SongView = class SongView {
   _resize() {
     const w = this.mainEl.clientWidth;
     if (!w) return; // hidden tab
+    const lh = this._laneHeight();
+    if (lh !== this.LANE_H) {
+      this.LANE_H = lh;
+      this.headsEl.querySelectorAll(".tl-lane-head").forEach((el) => (el.style.height = lh + "px"));
+    }
     const dpr = window.devicePixelRatio || 1;
     const h = this.RULER_H + this.tracks.length * this.LANE_H;
     this.W = w;
@@ -176,6 +227,31 @@ SoundPad.SongView = class SongView {
     this.canvas.width = Math.round(w * dpr);
     this.canvas.height = Math.round(h * dpr);
     this._layout();
+    this.draw();
+  }
+
+  /** Lane height in px: the fixed size, or (Auto) what fits every lane between here and the window's bottom. */
+  _laneHeight() {
+    const fixed = this.LANE_SIZES[this.laneSize];
+    if (fixed) return fixed;
+    const top = this.mainEl.getBoundingClientRect().top + window.scrollY;   // page position, not scroll-dependent
+    const avail = window.innerHeight - top - this.RULER_H - 14 /* scrollbar */ - 24 /* margin */;
+    const fit = Math.floor(avail / Math.max(1, this.tracks.length));
+    return Math.min(this.LANE_MAX, Math.max(this.LANE_MIN, fit));
+  }
+
+  /** Zoom so the whole song (and loop) fits the view, and scroll to its start. */
+  fitSong() {
+    if (!this.W) return;
+    const P = this.P, p = this.project;
+    const end = Math.max(P.BAR, P._ceilBar(P.songEnd(p)), p.timeline.loop ? p.timeline.loop.end : 0);
+    let idx = 0;
+    this.ZOOMS.forEach((z, i) => { if (end * z <= this.W - 8) idx = i; });
+    this.zoomIdx = idx;
+    this._layout();
+    this._scrollTo(0);
+    this._updateAutoLabel();
+    this._savePrefs();
     this.draw();
   }
 
@@ -207,6 +283,7 @@ SoundPad.SongView = class SongView {
     this._layout();
     this._scrollTo(this.scrollX);
     this._updateAutoLabel();
+    this._savePrefs();
     this.draw();
   }
 
@@ -358,7 +435,9 @@ SoundPad.SongView = class SongView {
     const firstStep = Math.max(0, Math.floor(this.scrollX / pps));
     const lastStep = Math.ceil((this.scrollX + W) / pps);
     const beatPx = 4 * pps, barPx = 16 * pps;
-    const labelEvery = Math.max(1, Math.ceil(34 / barPx));
+    // Number every 1, 2, 4, 8… bars (whatever leaves ~34px per label): 1, 5, 9, 13 reads musically.
+    const need = Math.ceil(34 / barPx);
+    const labelEvery = [1, 2, 4, 8, 16, 32, 64].find((n) => n >= need) || 64;
     g.fillStyle = "#11151b";
     g.fillRect(0, 0, W, RH);
     g.font = "600 11px Segoe UI, system-ui, sans-serif";
@@ -366,6 +445,7 @@ SoundPad.SongView = class SongView {
     for (let s = firstStep; s <= lastStep; s++) {
       const isBar = s % 16 === 0, isBeat = s % 4 === 0;
       if (!isBar && !(isBeat && beatPx >= 9) && pps < 6) continue;
+      if (isBar && barPx < 6 && (s / 16) % 4) continue;   // far out: a line every 4 bars only
       const x = Math.round(this._x(s));
       g.fillStyle = isBar ? "#2f3844" : isBeat ? "#1f252e" : "#1a1f27";
       g.fillRect(x, RH, 1, H - RH);
@@ -481,8 +561,10 @@ SoundPad.SongView = class SongView {
     if (!drums && part.notes.length) {
       const keys = part.notes.map((n) => n.key);
       lo = Math.min(...keys); hi = Math.max(...keys);
-      if (hi - lo < 6) { const mid = (hi + lo) / 2; lo = mid - 3; hi = mid + 3; }
+      // At least an octave of range, so a simple riff doesn't turn into giant blocks in tall lanes.
+      if (hi - lo < 12) { const mid = (hi + lo) / 2; lo = mid - 6; hi = mid + 6; }
     }
+    const barH = (rh) => Math.max(1.5, Math.min(rh * 0.8, 6));   // note thickness, centred in its row
     for (let off = 0; off < len; off += partLen) {
       for (const n of part.notes) {
         const s = off + n.step;
@@ -491,12 +573,12 @@ SoundPad.SongView = class SongView {
         if (drums) {
           const r = drums.indexOf(n.key);
           if (r < 0) continue;
-          const rh = ph / drums.length;
-          g.fillRect(nx, top + r * rh, Math.max(1.5, this.pps * 0.7), Math.max(1.5, rh * 0.8));
+          const rh = ph / drums.length, bh = barH(rh);
+          g.fillRect(nx, top + r * rh + (rh - bh) / 2, Math.max(1.5, Math.min(this.pps * 0.7, 6)), bh);
         } else {
-          const rh = ph / (hi - lo + 1);
+          const rh = ph / (hi - lo + 1), bh = barH(rh);
           const nw = Math.min(n.len, len - s) * this.pps;
-          g.fillRect(nx, top + (hi - n.key) * rh, Math.max(1.5, nw - 0.5), Math.max(1.5, rh));
+          g.fillRect(nx, top + (hi - n.key) * rh + (rh - bh) / 2, Math.max(1.5, nw - 0.5), bh);
         }
       }
     }
@@ -727,6 +809,12 @@ SoundPad.SongView = class SongView {
 
   destroy() {
     if (this._ro) this._ro.disconnect();
+    if (this._onWinResize) window.removeEventListener("resize", this._onWinResize);
     this.root.innerHTML = "";
   }
 };
+
+/** Zoom / snap / lane size, shared by every SongView (rebuilt when tracks change) and kept between visits. */
+SoundPad.SongView.prefs = (() => {
+  try { return JSON.parse(localStorage.getItem("soundpad.songView")) || {}; } catch { return {}; }
+})();

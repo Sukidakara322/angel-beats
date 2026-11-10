@@ -12,8 +12,9 @@
 window.SoundPad = window.SoundPad || {};
 
 SoundPad.DrumView = class DrumView {
-  constructor({ engine, root, project, track, instrument }) {
+  constructor({ engine, player, root, project, track, instrument }) {
     this.engine = engine;
+    this.player = player;
     this.root = root;
     this.project = project;
     this.track = track;
@@ -217,8 +218,8 @@ SoundPad.DrumView = class DrumView {
     this.kit.trigger(id, now, 0);
     this._flashPad(id);
     if (this.recordArmed && this.engine.isPlaying) {
-      const step = this.engine.quantizeToStep(now) % SoundPad.Project.partLength(this.part);
-      this._setCell(id, step, true);
+      const step = this.player.localStep(this.track, this.engine.quantizeToStep(now));
+      if (step >= 0) this._setCell(id, step, true);
     }
   }
 
