@@ -4,9 +4,13 @@
  *
  *   Project {
  *     version: 3, name, bpm,
- *     tracks:   [{ id, name, type, preset, params, volume, pan, mute, solo, currentPartId }],
+ *     tracks:   [{ id, name, type, preset, params, volume, pan, mute, solo, fx, currentPartId }],
  *               type = instrument engine ("drums" | "synth" | "guitar" | "bass-guitar"),
- *               preset = its sound, params = this track's tweaks on top of the preset
+ *               preset = its sound, params = this track's tweaks on top of the preset,
+ *               volume = fader (linear gain, 1 = 0 dB), pan -1…1,
+ *               fx = the track's mixer effects (see TRACK_FX_DEFAULTS)
+ *     mix:      { master, reverbReturn, reverbSize, delayReturn, delayTime, delayFeedback }
+ *               — the shared effect buses + master fader (see MIX_DEFAULTS)
  *     parts:    [{ id, trackId, name, minLength, notes: [{ step, len, key, vel }] }],
  *     timeline: { clips: [{ id, trackId, partId, start, length }],
  *                 loop: { start, end } | null }
@@ -36,6 +40,29 @@ SoundPad.Project = {
   MAX_TRACKS: 32,
   DEFAULT_PRESETS: { drums: "hard", synth: "growl-bass", guitar: "clean", "bass-guitar": "metal-bass" },
 
+  /**
+   * A track's mixer effects. Every value at its default = no effect.
+   *   lowCut Hz (20 = off) · eqLow/eqMid/eqHigh dB · eqMidFreq Hz
+   *   comp 0…1 · chorus 0…1 · reverb/delay = send amounts 0…1
+   *   duckSource = track id that ducks this one ("" = off; a drum track ducks on kicks only)
+   *   duck 0…1 = how deep · duckRelease ms = how fast it comes back
+   */
+  TRACK_FX_DEFAULTS: {
+    lowCut: 20, eqLow: 0, eqMid: 0, eqMidFreq: 1000, eqHigh: 0,
+    comp: 0, chorus: 0, reverb: 0, delay: 0,
+    duckSource: "", duck: 0.6, duckRelease: 180,
+  },
+
+  /** Shared buses + master. Returns/master are linear gains; reverbSize in seconds. */
+  MIX_DEFAULTS: {
+    master: 1,
+    reverbReturn: 0.8, reverbSize: 2.2,
+    delayReturn: 0.7, delayTime: "1/8d", delayFeedback: 0.35,
+  },
+
+  /** Delay times, synced to the tempo: [id, length in beats]. */
+  DELAY_TIMES: [["1/16", 0.25], ["1/8", 0.5], ["1/8d", 0.75], ["1/4", 1], ["1/4d", 1.5], ["1/2", 2]],
+
   uid(prefix) {
     return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   },
@@ -49,6 +76,7 @@ SoundPad.Project = {
       tracks: [],
       parts: [],
       timeline: { clips: [], loop: null },
+      mix: { ...this.MIX_DEFAULTS },
     };
     this.addTrack(p, "drums", "Drums", "hard");
     this.addTrack(p, "synth", "Bass", "growl-bass");
@@ -69,6 +97,7 @@ SoundPad.Project = {
       pan: 0,
       mute: false,
       solo: false,
+      fx: { ...this.TRACK_FX_DEFAULTS },
       currentPartId: null,
     };
     p.tracks.push(track);
@@ -111,6 +140,33 @@ SoundPad.Project = {
     if (track) track.params = {};
   },
 
+  // --- Mixer ---------------------------------------------------------
+
+  setTrackFx(p, trackId, id, value) {
+    const track = this.track(p, trackId);
+    if (track && id in this.TRACK_FX_DEFAULTS) track.fx = { ...track.fx, [id]: value };
+  },
+
+  resetTrackFx(p, trackId) {
+    const track = this.track(p, trackId);
+    if (track) track.fx = { ...this.TRACK_FX_DEFAULTS };
+  },
+
+  /** Does the track use any effect (anything off its default)? Sidechain counts once a source is set. */
+  hasFx(track) {
+    const d = this.TRACK_FX_DEFAULTS, fx = track.fx || {};
+    return Object.keys(d).some((k) => k !== "duck" && k !== "duckRelease" && fx[k] !== d[k]);
+  },
+
+  setMix(p, id, value) {
+    if (id in this.MIX_DEFAULTS) p.mix = { ...p.mix, [id]: value };
+  },
+
+  delayBeats(id) {
+    const hit = this.DELAY_TIMES.find(([k]) => k === id);
+    return hit ? hit[1] : 0.75;
+  },
+
   /**
    * Delete a track with all its parts and clips. The last track can't be
    * deleted (returns false).
@@ -120,6 +176,7 @@ SoundPad.Project = {
     p.tracks = p.tracks.filter((t) => t.id !== trackId);
     p.parts = p.parts.filter((x) => x.trackId !== trackId);
     p.timeline.clips = p.timeline.clips.filter((c) => c.trackId !== trackId);
+    p.tracks.forEach((t) => { if (t.fx && t.fx.duckSource === trackId) t.fx = { ...t.fx, duckSource: "" }; });
     return true;
   },
 
@@ -429,7 +486,13 @@ SoundPad.Project = {
       t.pan = t.pan ?? 0;
       t.mute = !!t.mute;
       t.solo = !!t.solo;
+      t.fx = { ...this.TRACK_FX_DEFAULTS, ...(t.fx && typeof t.fx === "object" ? t.fx : {}) };
     });
+    // A sidechain source must be another track that exists.
+    p.tracks.forEach((t) => {
+      if (t.fx.duckSource && (t.fx.duckSource === t.id || !this.track(p, t.fx.duckSource))) t.fx.duckSource = "";
+    });
+    p.mix = { ...this.MIX_DEFAULTS, ...(p.mix && typeof p.mix === "object" ? p.mix : {}) };
 
     // Timeline: keep only clips whose part exists on the same track.
     const tl = p.timeline && Array.isArray(p.timeline.clips) ? p.timeline : { clips: [], loop: p.timeline?.loop };

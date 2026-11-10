@@ -8,10 +8,13 @@
  *               part's own length. Nothing else plays, so you hear just
  *               the part you are writing. (Mute / solo are song controls
  *               and don't apply here.)
- *   "song"    — the Song tab: every track plays the clip under the
+ *   "song"    — the Song / Mixer tab: every track plays the clip under the
  *               playhead on its lane (repeating the part if the clip is
  *               longer than it). The song loops over the loop region, or
- *               0 → song end.
+ *               0 → song end (or a fixed `range`, for the WAV export).
+ *
+ * Sidechain: when a track plays (a drum track: a kick), every track whose
+ * fx.duckSource is that track gets its channel ducked at that moment.
  * ------------------------------------------------------------------ */
 window.SoundPad = window.SoundPad || {};
 
@@ -22,6 +25,12 @@ SoundPad.Player = class Player {
     this.tracks = [];      // [{ track, instrument }]
     this.mode = "pattern";
     this.trackId = null;   // pattern mode: the track whose open part plays
+    this.range = null;     // song mode: fixed { start, end } (WAV export) instead of loop / song end
+  }
+
+  /** The song steps that play: a fixed range, the loop region, or 0 → song end. */
+  _range() {
+    return this.range || SoundPad.Project.songRange(this.project);
   }
 
   setProject(project, tracks) {
@@ -58,7 +67,7 @@ SoundPad.Player = class Player {
     const P = SoundPad.Project;
     if (!p) return P.BAR;
     if (this.mode === "song") {
-      const r = P.songRange(p);
+      const r = this._range();
       return r.end - r.start;
     }
     const part = this.patternPart();
@@ -89,11 +98,13 @@ SoundPad.Player = class Player {
     }
 
     const song = this.mode === "song";
-    const range = song ? P.songRange(p) : null;
+    const range = song ? this._range() : null;
     const songStep = song ? range.start + step : -1;
     const sps = this.engine.secondsPerStep();
     const anySolo = p.tracks.some((t) => t.solo);
     const locals = {};
+    // Tracks that duck (sidechain) when their source plays.
+    const duckers = this.tracks.filter((rt) => rt.channel && rt.track.fx && rt.track.fx.duckSource && rt.track.fx.duck > 0);
 
     for (const { track, instrument } of this.tracks) {
       // room = steps until this part stops sounding here (notes are cut there,
@@ -123,6 +134,12 @@ SoundPad.Player = class Player {
           instrument.triggerChord(starts.map((n) => ({ key: n.key, dur: gate(n), vel: n.vel })), time);
         } else {
           for (const n of starts) instrument.trigger(n.key, time, gate(n), n.vel);
+        }
+        // Sidechain: this track just played → duck the tracks keyed to it (a drum track: kicks only).
+        if (duckers.length && (track.type !== "drums" || starts.some((n) => n.key === "kick"))) {
+          for (const d of duckers) {
+            if (d.track.fx.duckSource === track.id) d.channel.duck(time, d.track.fx.duck, d.track.fx.duckRelease / 1000);
+          }
         }
       } catch (err) {
         // One track's bad note must not silence the others (or stop the clock).

@@ -16,6 +16,7 @@
         <div class="add-menu hidden" id="addMenu"><!-- built by app.js --></div>
       </div>
       <button class="inst song-tab" id="songTab" title="Arrange parts on the timeline">♫ Song</button>
+      <button class="inst song-tab" id="mixerTab" title="Levels, pan and effects for every track">🎚 Mixer</button>
     </nav>
   </header>
 
@@ -75,6 +76,9 @@
     <!-- Song timeline -->
     <div id="songView" class="hidden"><!-- built by SongView --></div>
 
+    <!-- Mixer -->
+    <div id="mixerView" class="hidden"><!-- built by MixerView --></div>
+
     <!-- Saved projects -->
     <section class="library">
       <div class="lib-head">
@@ -82,6 +86,7 @@
         <div class="save-row">
           <input id="seqName" type="text" placeholder="Name this song…" maxlength="40" />
           <button id="saveBtn" class="tbtn save">💾 Save</button>
+          <button id="exportBtn" class="tbtn" title="Render the whole song (with the mix and effects) to a .wav file">⬇ Export WAV</button>
         </div>
       </div>
       <p class="store-note" id="storeNote"><!-- set by app.js --></p>
@@ -95,6 +100,7 @@
   </footer>
 
   <script src="js/engine.js"></script>
+  <script src="js/mix.js"></script>
   <script src="js/instruments.js"></script>
   <script src="js/drums.js"></script>
   <script src="js/synth.js"></script>
@@ -102,12 +108,14 @@
   <script src="js/bass-guitar.js"></script>
   <script src="js/project.js"></script>
   <script src="js/player.js"></script>
+  <script src="js/export.js"></script>
   <script src="js/param-panel.js"></script>
   <script src="js/velocity-lane.js"></script>
   <script src="js/length-ruler.js"></script>
   <script src="js/drum-view.js"></script>
   <script src="js/piano-roll.js"></script>
   <script src="js/song-view.js"></script>
+  <script src="js/mixer-view.js"></script>
   <script src="js/store.js"></script>
   <script src="js/app.js"></script>
 </body>

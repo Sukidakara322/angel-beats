@@ -1,11 +1,13 @@
 /* ------------------------------------------------------------------
  * Sound Pad — App orchestrator
  * Owns the current Project and wires it to audio + UI:
- *   • for every track: a Channel (volume/pan), an Instrument (from the
- *     registry) and an editor view, plus a tab in the top bar
+ *   • for every track: a Channel (mixer strip: EQ, comp, chorus, sidechain,
+ *     fader, pan, sends), an Instrument (from the registry) and an editor
+ *     view, plus a tab in the top bar
  *   • "+ Add track", and the track bar (sound / rename / delete track)
- *   • the Song tab (timeline). What plays follows the open tab:
- *     a track tab loops only its open part, the Song tab plays the song
+ *   • the Song tab (timeline) and the Mixer tab. What plays follows the open
+ *     tab: a track tab loops only its open part, Song / Mixer play the song
+ *   • WAV export of the song
  *   • the shared transport (play / record / tempo / volume / position)
  *   • parts bar, save / load, keyboard routing, playhead drawing
  * The Player decides what to play on each step; views only edit data.
@@ -17,11 +19,13 @@
   engine.onStep = (step, time) => player.onStep(step, time);
 
   const SONG = "song";        // id of the Song tab (track tabs use track ids)
+  const MIXER = "mixer";      // id of the Mixer tab
 
   let project = null;
   let rts = [];               // per-track runtime: { track, channel, instrument, view, root, tab }
   let songView = null;
-  let active = null;          // track id or SONG
+  let mixerView = null;
+  let active = null;          // track id, SONG or MIXER
   let recordArmed = false;
   let currentSeqId = null;
 
@@ -40,8 +44,11 @@
   const storeNoteEl = $("storeNote");
   const tabsEl = $("trackTabs");
   const songTab = $("songTab");
+  const mixerTab = $("mixerTab");
   const viewsEl = $("views");
   const songRoot = $("songView");
+  const mixerRoot = $("mixerView");
+  const exportBtn = $("exportBtn");
   const stageEl = $("stage");
   const partBarEl = $("partBar");
   const pbTrackEl = $("pbTrack");
@@ -80,17 +87,17 @@
       rt.channel.dispose();
     });
     if (songView) songView.destroy();
+    if (mixerView) mixerView.destroy();
 
     project = next;
+    engine.setMix(project.mix);
     engine.setBpm(project.bpm);
     project.bpm = engine.bpm;
     bpmInput.value = engine.bpm;
 
     rts = project.tracks.map((track) => {
       const def = SoundPad.Instruments.get(track.type);
-      const channel = new SoundPad.Channel(engine);
-      channel.setVolume(track.volume);
-      channel.setPan(track.pan);
+      const channel = new SoundPad.Channel(engine, track);   // reads the track's volume / pan / fx
       const instrument = def.create(engine, channel, track.preset, track.params);
 
       const root = document.createElement("div");
@@ -149,35 +156,48 @@
     });
     songView.build();
 
+    mixerView = new SoundPad.MixerView({
+      root: mixerRoot,
+      project,
+      tracks: rts,
+      engine,
+      onChange: () => {},     // mute / solo: the Song lanes re-read them when shown
+    });
+    mixerView.build();
+
     player.setProject(project, rts);
     clearPlayheads();
     addTrackBtn.disabled = project.tracks.length >= P.MAX_TRACKS;
 
-    if (prevActive === SONG) return setActive(SONG);
+    if (prevActive === SONG || prevActive === MIXER) return setActive(prevActive);
     const keep = rtOf(prevActive) || rts.find((rt) => rt.track.type === prevType) || rts[0];
     setActive(keep.track.id);
   }
 
   // --- Tabs: tracks + song ------------------------------------------
 
-  /** Show a track editor (Pattern mode) or the Song timeline (Song mode). */
+  /** Show a track editor (its part loops), the Song timeline or the Mixer (both play the song). */
   function setActive(id) {
     active = id;
-    const song = id === SONG;
+    const song = id === SONG, mixer = id === MIXER, whole = song || mixer;
     songTab.classList.toggle("active", song);
-    stageEl.classList.toggle("wide", song);      // the timeline uses the full window width
+    mixerTab.classList.toggle("active", mixer);
+    stageEl.classList.toggle("wide", whole);     // timeline / mixer use the full window width
     songRoot.classList.toggle("hidden", !song);
-    partBarEl.classList.toggle("hidden", song);
-    viewsEl.classList.toggle("hidden", song);
+    mixerRoot.classList.toggle("hidden", !mixer);
+    partBarEl.classList.toggle("hidden", whole);
+    viewsEl.classList.toggle("hidden", whole);
+    clearBtn.disabled = mixer;                   // nothing to clear in the mixer
     rts.forEach((rt) => {
       const on = rt.track.id === id;
       rt.tab.classList.toggle("active", on);
       rt.root.classList.toggle("hidden", !on);
     });
-    // What plays follows the tab: a track tab loops only its open part, the Song tab plays the song.
-    player.setMode(song ? "song" : "pattern", song ? null : id);
+    // What plays follows the tab: a track tab loops only its open part, Song / Mixer play the song.
+    player.setMode(whole ? "song" : "pattern", whole ? null : id);
     clearPlayheads();
-    if (song) songView.render();   // parts may have been added/renamed in the editors
+    if (song) songView.render();         // parts / mute / solo may have changed elsewhere
+    else if (mixer) mixerView.render();
     else renderPartBar();
     applyRecordArm();      // record arming follows the visible track
   }
@@ -218,7 +238,11 @@
   audioRestart.addEventListener("click", restartAudio);
 
   // Errors outside the scheduler (note previews, live keys…) are shown too, not just logged.
-  window.addEventListener("error", (e) => engine._report("error", e.message || "script error"));
+  window.addEventListener("error", (e) => {
+    // Chrome's "ResizeObserver loop…" notice is harmless (a view resized itself while being measured).
+    if (/ResizeObserver loop/.test(e.message || "")) return;
+    engine._report("error", e.message || "script error");
+  });
   window.addEventListener("unhandledrejection", (e) => engine._report("error", (e.reason && e.reason.message) || String(e.reason)));
 
   // --- Transport ----------------------------------------------------
@@ -257,6 +281,7 @@
   }
 
   function clearActive() {
+    if (active === MIXER) return;
     if (active === SONG) {
       if (!confirm("Remove every clip from the song timeline? (The parts themselves are kept.)")) return;
       P.clearTimeline(project);
@@ -455,6 +480,31 @@
     renderLibrary();
   }
 
+  /** Render the whole song offline and download it as a .wav (mix, effects and master included). */
+  async function exportWav() {
+    if (!P.songEnd(project)) {
+      statusHint.textContent = "Nothing to export yet — place parts on the Song timeline first";
+      return;
+    }
+    const name = ((seqNameInput.value || project.name || "").trim() || "Sound Pad song").replace(/[\\/:*?"<>|]+/g, "_");
+    exportBtn.disabled = true;
+    const label = exportBtn.textContent;
+    exportBtn.textContent = "Rendering…";
+    try {
+      const { blob, seconds, peak } = await SoundPad.Export.wav(project);
+      SoundPad.Export.download(blob, `${name}.wav`);
+      const m = Math.floor(seconds / 60), s = Math.round(seconds % 60);
+      const peakDb = peak > 0 ? (20 * Math.log10(peak)).toFixed(1) : "−∞";
+      statusHint.textContent = `Exported "${name}.wav" · ${m}:${String(s).padStart(2, "0")} · peak ${peakDb} dBFS`;
+    } catch (err) {
+      statusHint.textContent = `Export failed: ${err.message || err}`;
+      console.error(err);
+    } finally {
+      exportBtn.disabled = false;
+      exportBtn.textContent = label;
+    }
+  }
+
   async function loadSequence(id) {
     const rec = await SoundPad.Store.get(id);
     if (!rec) return;
@@ -555,6 +605,8 @@
   recBtn.addEventListener("click", toggleRecord);
   clearBtn.addEventListener("click", clearActive);
   songTab.addEventListener("click", () => setActive(SONG));
+  mixerTab.addEventListener("click", () => setActive(MIXER));
+  exportBtn.addEventListener("click", exportWav);
 
   bpmInput.addEventListener("change", () => {
     engine.setBpm(parseInt(bpmInput.value, 10));
@@ -581,6 +633,7 @@
   SoundPad.app = {
     get project() { return project; },
     get songView() { return songView; },
+    get mixerView() { return mixerView; },
     get tracks() { return rts; },
     player,
     engine,

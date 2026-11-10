@@ -5,19 +5,24 @@
  *
  *   { group, id, label, type: "toggle" }
  *   { group, id, label, type: "range", min, max, step, unit: "%"|"dB"|"ms" }
- *   { group, id, label, type: "select", options: [[value, label], …] }
+ *   { group, id, label, type: "select", options: [[value, label], …] }     (buttons)
+ *   { group, id, label, type: "dropdown", options: [[value, label], …] }   (a <select>, for long lists)
+ *   range units: "%" | "dB" | "ms" | "Hz" | "s"
  *
  *   new ParamPanel(host, {
- *     schema, values: () => effective values, edited: () => bool,
+ *     schema (array, or () => array for options that change),
+ *     values: () => effective values, edited: () => bool,
  *     onChange(id, value, commit),   // commit = false while a slider drags
- *     onReset()
+ *     onReset(),
+ *     title, texts: { edited, clean, reset }   // optional wording
  *   })
- * Any instrument that registers a `params` schema gets this panel.
+ * Any instrument that registers a `params` schema gets this panel; the
+ * mixer uses it for track effects and the Reverb / Delay buses.
  * ------------------------------------------------------------------ */
 window.SoundPad = window.SoundPad || {};
 
 SoundPad.ParamPanel = class ParamPanel {
-  constructor(host, { schema, values, edited, onChange, onReset, title = "Sound controls" }) {
+  constructor(host, { schema, values, edited, onChange, onReset, title = "Sound controls", texts = {} }) {
     this.host = host;
     this.schema = schema;
     this.values = values;
@@ -25,26 +30,32 @@ SoundPad.ParamPanel = class ParamPanel {
     this.onChange = onChange;
     this.onReset = onReset || (() => {});
     this.title = title;
+    this.texts = { edited: "edited — saved with this track", clean: "preset values", reset: "Reset to preset", ...texts };
   }
 
   _fmt(item, v) {
     if (item.unit === "%") return Math.round(v * 100) + "%";
     if (item.unit === "dB") return (v > 0 ? "+" : "") + v + " dB";
     if (item.unit === "ms") return v + " ms";
+    if (item.unit === "Hz") return v >= 1000 ? (v / 1000).toFixed(v % 1000 ? 1 : 0) + " kHz" : v + " Hz";
+    if (item.unit === "s") return v.toFixed(1) + " s";
     return String(v);
   }
 
   render() {
     const vals = this.values();
+    const schema = typeof this.schema === "function" ? this.schema() : this.schema;
     this.host.innerHTML = "";
     this.host.classList.add("param-panel");
 
     const head = document.createElement("div");
     head.className = "pp-head";
-    head.innerHTML = `<h3>${this.title}</h3><span class="pp-edited">${this.edited() ? "edited — saved with this track" : "preset values"}</span>`;
+    head.innerHTML = `<h3></h3><span class="pp-edited"></span>`;
+    head.querySelector("h3").textContent = this.title;
+    head.querySelector(".pp-edited").textContent = this.edited() ? this.texts.edited : this.texts.clean;
     const reset = document.createElement("button");
     reset.className = "tbtn small";
-    reset.textContent = "Reset to preset";
+    reset.textContent = this.texts.reset;
     reset.disabled = !this.edited();
     reset.addEventListener("click", () => this.onReset());
     head.appendChild(reset);
@@ -53,7 +64,7 @@ SoundPad.ParamPanel = class ParamPanel {
     const body = document.createElement("div");
     body.className = "pp-body";
     const groups = new Map();
-    this.schema.forEach((item) => {
+    schema.forEach((item) => {
       if (!groups.has(item.group)) {
         const g = document.createElement("div");
         g.className = "pp-group";
@@ -92,6 +103,18 @@ SoundPad.ParamPanel = class ParamPanel {
         seg.appendChild(b);
       });
       row.appendChild(seg);
+    } else if (item.type === "dropdown") {
+      const sel = document.createElement("select");
+      sel.className = "pp-select";
+      item.options.forEach(([v, text]) => {
+        const o = document.createElement("option");
+        o.value = v;
+        o.textContent = text;
+        sel.appendChild(o);
+      });
+      sel.value = value;
+      sel.addEventListener("change", () => this.onChange(item.id, sel.value, true));
+      row.appendChild(sel);
     } else {
       const input = document.createElement("input");
       input.type = "range";

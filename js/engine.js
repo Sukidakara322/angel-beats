@@ -45,29 +45,110 @@ SoundPad.Engine = class Engine {
     }
     const Ctx = window.AudioContext || window.webkitAudioContext;
     this.ctx = new Ctx();
-    this.master = this.ctx.createGain();
-    this.master.gain.value = this._pendingVolume ?? 0.9;
+    this._buildGraph();
+    if (this.ctx.state === "suspended") await this.ctx.resume().catch(() => {});
+    this._lastClock = { t: this.ctx.currentTime, at: performance.now() };
+    this._watchTimer = setInterval(() => this._watch(), 500);
+  }
 
-    // Bus limiter: glues a fuller kit together and stops many simultaneous
+  /**
+   * The master section (shared by live playback and the offline export):
+   *
+   *   master (sum of all channels + effect returns) → master fader → limiter → soft clipper
+   *     → live: monitor volume (the transport's Volume slider) → speakers
+   *     → offline: straight to the render (the monitor knob isn't part of the song)
+   * The master meter taps the limiter's output (before the clipper), so overs show red.
+   */
+  _buildGraph() {
+    const ctx = this.ctx;
+    this.master = ctx.createGain();
+    this.masterFader = ctx.createGain();
+
+    // Bus limiter: glues a fuller mix together and stops many simultaneous
     // hits from clipping harshly — part of what makes it sound "hard".
-    this.limiter = this.ctx.createDynamicsCompressor();
+    this.limiter = ctx.createDynamicsCompressor();
     this.limiter.threshold.value = -3;
     this.limiter.knee.value = 6;
     this.limiter.ratio.value = 12;
     this.limiter.attack.value = 0.003;
     this.limiter.release.value = 0.25;
+    this.master.connect(this.masterFader).connect(this.limiter);
 
-    this.master.connect(this.limiter).connect(this.ctx.destination);
-    // A tap on the output, only to check the signal is still valid (see _watch).
-    this._tap = this.ctx.createAnalyser();
-    this._tap.fftSize = 2048;
-    this._tapBuf = new Float32Array(this._tap.fftSize);
-    this.limiter.connect(this._tap);
+    // The compressor alone lets fast peaks through (+2 dBFS measured with 4 tracks at 0 dB),
+    // which hard-clips the sound card and the WAV. A soft clipper after it is transparent up
+    // to about −2 dBFS and rounds anything hotter off smoothly, never past ≈ −0.2 dBFS.
+    // (A WaveShaper only reads inputs in −1…1, so the signal is scaled down ×¼ going in and
+    // the curve maps that back to real levels: it covers inputs up to ±4, i.e. +12 dBFS.)
+    this.clipIn = ctx.createGain();
+    this.clipIn.gain.value = 0.25;
+    this.clipper = ctx.createWaveShaper();
+    this.clipper.curve = Engine.softClipCurve();
+    // No oversampling: its anti-alias filter rings past the ceiling (+0.3 dBFS measured with 4x).
+    // The clipper only shapes brief peaks above −2 dBFS, so aliasing stays negligible.
+    this.clipper.oversample = "none";
+    this.limiter.connect(this.clipIn).connect(this.clipper);
 
+    if (this.offline) {
+      this.clipper.connect(ctx.destination);
+    } else {
+      this.monitor = ctx.createGain();
+      this.monitor.gain.value = this._pendingVolume ?? 0.9;
+      this.clipper.connect(this.monitor).connect(ctx.destination);
+      // A tap on the output: the master meter, and the check that the signal is still valid (see _watch).
+      this._tap = ctx.createAnalyser();
+      this._tap.fftSize = 2048;
+      this._tapBuf = new Float32Array(this._tap.fftSize);
+      this.limiter.connect(this._tap);
+    }
+
+    this.buses = new SoundPad.FxBuses(this);
     this._buildNoiseBuffer();
-    if (this.ctx.state === "suspended") await this.ctx.resume().catch(() => {});
-    this._lastClock = { t: this.ctx.currentTime, at: performance.now() };
-    this._watchTimer = setInterval(() => this._watch(), 500);
+    this.applyMix(true);
+  }
+
+  /** Output ceiling: linear below KNEE, then a tanh shoulder that never exceeds CEIL. Input pre-scaled ×¼. */
+  static softClipCurve() {
+    if (Engine._clipCurve) return Engine._clipCurve;
+    const n = 8192, KNEE = 0.8, CEIL = 0.977, c = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const x = ((i / (n - 1)) * 2 - 1) * 4;                // back to real level (±4)
+      const a = Math.abs(x);
+      const y = a <= KNEE ? a : KNEE + (CEIL - KNEE) * Math.tanh((a - KNEE) / (CEIL - KNEE));
+      c[i] = Math.sign(x) * y;
+    }
+    return (Engine._clipCurve = c);
+  }
+
+  /** An engine that renders into an OfflineAudioContext (WAV export): no clock, no monitor, no meters. */
+  initOffline(ctx, mix) {
+    this.offline = true;
+    this.ctx = ctx;
+    this.mix = mix;
+    this._buildGraph();
+  }
+
+  /** Use these mix settings (the project's `mix`) for the master fader + buses. */
+  setMix(mix) {
+    this.mix = mix;
+    this.applyMix();
+  }
+
+  /** Push the current mix settings into the graph (after a mixer edit). */
+  applyMix(immediate = false) {
+    if (!this.ctx || !this.buses) return;
+    const mix = this.mix || SoundPad.Project.MIX_DEFAULTS;
+    if (immediate) this.masterFader.gain.value = mix.master;
+    else this.masterFader.gain.setTargetAtTime(mix.master, this.ctx.currentTime, 0.02);
+    this.buses.apply(mix, this.bpm, immediate);
+  }
+
+  /** Master output level right now (linear peak), for the mixer's master meter. */
+  masterPeak() {
+    if (!this._tap) return 0;
+    this._tap.getFloatTimeDomainData(this._tapBuf);
+    let pk = 0;
+    for (let i = 0; i < this._tapBuf.length; i++) pk = Math.max(pk, Math.abs(this._tapBuf[i]));
+    return pk;
   }
 
   /**
@@ -82,7 +163,7 @@ SoundPad.Engine = class Engine {
     this._reported = new Set();
     this._suspendedKey = null;
     const old = this.ctx;
-    this.ctx = this.master = this.limiter = this._tap = this.noiseBuffer = null;
+    this.ctx = this.master = this.masterFader = this.limiter = this.clipIn = this.clipper = this.monitor = this._tap = this.buses = this.noiseBuffer = null;
     if (old) await old.close().catch(() => {});
     await this.init();
   }
@@ -128,13 +209,15 @@ SoundPad.Engine = class Engine {
     }
   }
 
+  /** Monitor volume (the transport slider): only what you hear, not part of the mix or the export. */
   setVolume(v) {
     this._pendingVolume = v;
-    if (this.master) this.master.gain.value = v;
+    if (this.monitor) this.monitor.gain.value = v;
   }
 
   setBpm(bpm) {
     this.bpm = Math.min(240, Math.max(40, bpm | 0));
+    this.applyMix();                 // the delay is tempo-synced
   }
 
   setLoopSteps(n) {
@@ -211,52 +294,5 @@ SoundPad.Engine = class Engine {
   }
 };
 
-/* ------------------------------------------------------------------
- * Channel — one per track: input → volume → pan → master.
- * Nodes are created lazily on first use, because the AudioContext only
- * exists after the first user gesture.
- * ------------------------------------------------------------------ */
-SoundPad.Channel = class Channel {
-  constructor(engine) {
-    this.engine = engine;
-    this.volume = 1;
-    this.pan = 0;
-    this._gain = null;
-    this._pan = null;
-  }
-
-  /** The node instruments connect their voices to. */
-  get input() {
-    if (!this._gain) this._build();
-    return this._gain;
-  }
-
-  _build() {
-    const ctx = this.engine.ctx;
-    this._gain = ctx.createGain();
-    this._gain.gain.value = this.volume;
-    if (ctx.createStereoPanner) {
-      this._pan = ctx.createStereoPanner();
-      this._pan.pan.value = this.pan;
-      this._gain.connect(this._pan).connect(this.engine.master);
-    } else {
-      this._gain.connect(this.engine.master);
-    }
-  }
-
-  setVolume(v) {
-    this.volume = v;
-    if (this._gain) this._gain.gain.value = v;
-  }
-
-  setPan(p) {
-    this.pan = p;
-    if (this._pan) this._pan.pan.value = p;
-  }
-
-  dispose() {
-    if (this._gain) this._gain.disconnect();
-    if (this._pan) this._pan.disconnect();
-    this._gain = this._pan = null;
-  }
-};
+// The per-track Channel (EQ, compressor, chorus, sidechain, fader, pan, sends)
+// and the shared Reverb / Delay buses live in js/mix.js.
