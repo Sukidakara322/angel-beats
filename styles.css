@@ -281,6 +281,33 @@ html, body {
 .zoom .tbtn { min-width: 32px; }
 .zoom { align-items: center; }
 .zoom-label { font-size: 13px; color: var(--muted); padding: 0 2px 0 6px; }
+/* Lines: selection / copy-paste bar */
+.ln-editbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: -2px 0 12px; padding: 6px 8px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+}
+.ln-eb-label { font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--muted); }
+.ln-sel-info { font-size: 12px; color: var(--muted); min-width: 200px; }
+.ln-sel-info.on { color: var(--text); font-weight: 600; }
+.ln-eb-btns { display: flex; gap: 4px; flex-wrap: wrap; }
+.ln-clip-info { margin-left: auto; font-size: 12px; color: var(--playhead); }
+
+/* Lines: loop on/off + from / to */
+.loop-ctrl {
+  display: flex; align-items: center; gap: 8px; padding: 2px 8px 2px 2px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2);
+}
+.loop-ctrl label { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
+.loop-toggle.on { background: var(--playhead); color: #0e1116; border-color: var(--playhead); font-weight: 600; }
+.loop-in {
+  width: 58px; padding: 5px 6px; font-size: 13px; text-align: center; font-variant-numeric: tabular-nums;
+  background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
+}
+.loop-in:focus { outline: none; border-color: var(--playhead); }
+.loop-in.off { color: var(--muted); }
+.loop-in.bad { border-color: var(--accent); color: var(--accent); }
+.loop-len { min-width: 44px; font-size: 12px; color: var(--muted); white-space: nowrap; }
 .zoom-val { min-width: 40px; text-align: center; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* Timeline: DOM lane headers on the left, one canvas for ruler + lanes. */

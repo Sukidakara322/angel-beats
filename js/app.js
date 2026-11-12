@@ -759,9 +759,14 @@
   document.addEventListener("keydown", (e) => {
     if (e.repeat || ["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName)) return;
     const k = e.key.toLowerCase();
+    // Ctrl / Cmd combinations are editing shortcuts (Lines: copy / paste…) — never play, record or notes.
+    if (e.ctrlKey || e.metaKey) {
+      if (active === LINES && linesView.handleKey(k, e)) e.preventDefault();
+      return;
+    }
     if (k === " ") { e.preventDefault(); togglePlay(); return; }
     if (k === "r") { toggleRecord(); return; }
-    if (active === LINES) { if (linesView.handleKey(k)) e.preventDefault(); return; }
+    if (active === LINES) { if (linesView.handleKey(k, e)) e.preventDefault(); return; }
     const rt = activeRt();
     if (rt && rt.view.handleKey(k)) e.preventDefault();
   });

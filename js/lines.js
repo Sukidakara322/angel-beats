@@ -6,7 +6,8 @@
  * You write each instrument's melody straight on the shared timeline.
  *
  * In memory (what the views, Player, Mixer and WAV export use):
- *   { kind: "lines", version, name, bpm, mix, loop: { start, end } | null,
+ *   { kind: "lines", version, name, bpm, mix, loop: { start, end, on } | null,
+ *     (loop = the region to repeat; `on` false keeps it but plays the whole song)
  *     tracks: [{ id, name, type, preset, params, volume, pan, mute, solo, fx,
  *                size, notes: [{ step, len, key, vel }] }] }
  * A line has the same sound / mixer fields as a Patterns track, so Channels,
@@ -118,20 +119,56 @@ SoundPad.Lines = {
     return Math.max(this.BAR, this._ceilBar(this.end(p)));
   },
 
-  /** Steps that play: the loop if set, else bar 1 → the end. */
+  /** Is the loop region switched on (so playback repeats it)? */
+  looping(p) {
+    return !!(p.loop && p.loop.on);
+  },
+
+  /** Steps that play: the loop if it's on, else bar 1 → the end. */
   range(p) {
-    if (p.loop) return { start: p.loop.start, end: p.loop.end };
+    if (this.looping(p)) return { start: p.loop.start, end: p.loop.end };
     return { start: 0, end: this.length(p) };
   },
 
+  /** Set the loop region (either order); it keeps its on/off state, a new one starts on. */
   setLoop(p, start, end) {
     const s = Math.max(0, Math.round(Math.min(start, end)));
     const e = Math.min(this.MAX_STEPS, Math.round(Math.max(start, end)));
-    p.loop = e > s ? { start: s, end: e } : null;
+    if (e <= s) return;
+    p.loop = { start: s, end: e, on: p.loop ? p.loop.on : true };
+  },
+
+  /** Slide the loop to a new start, same length. */
+  moveLoop(p, start) {
+    if (!p.loop) return;
+    const len = p.loop.end - p.loop.start;
+    const s = Math.max(0, Math.min(this.MAX_STEPS - len, Math.round(start)));
+    p.loop = { ...p.loop, start: s, end: s + len };
+  },
+
+  /** Loop on / off. The region is kept while off; switching on without one loops bar 1 → the end. */
+  setLoopOn(p, on) {
+    if (on && !p.loop) p.loop = { start: 0, end: this.length(p), on: true };
+    else if (p.loop) p.loop = { ...p.loop, on: !!on };
   },
 
   clearLoop(p) {
     p.loop = null;
+  },
+
+  /** Step → "3", "3.2" or "3.2.4" (bar.beat.step, all from 1). */
+  fmtPos(step) {
+    const bar = Math.floor(step / 16) + 1, beat = Math.floor((step % 16) / 4) + 1, st = step % 4;
+    return st ? `${bar}.${beat}.${st + 1}` : beat > 1 ? `${bar}.${beat}` : `${bar}`;
+  },
+
+  /** "3", "3.2", "3.2.4" (also "3:2", "3 2") → step, or null if it isn't a position. */
+  parsePos(text) {
+    const parts = String(text || "").trim().split(/[.:,\s]+/).filter(Boolean).map(Number);
+    if (!parts.length || parts.length > 3 || parts.some((n) => !Number.isInteger(n) || n < 1)) return null;
+    const [bar, beat = 1, st = 1] = parts;
+    if (beat > 4 || st > 4) return null;
+    return Math.min(this.MAX_STEPS, (bar - 1) * 16 + (beat - 1) * 4 + (st - 1));
   },
 
   // --- Save / load -------------------------------------------------------
@@ -195,7 +232,8 @@ SoundPad.Lines = {
       if (t.fx.duckSource && (t.fx.duckSource === t.id || !this.line(p, t.fx.duckSource))) t.fx.duckSource = "";
     });
     const loop = src.loop;
-    p.loop = loop && loop.start >= 0 && loop.end > loop.start ? { start: loop.start, end: Math.min(MAX, loop.end) } : null;
+    p.loop = loop && loop.start >= 0 && loop.end > loop.start
+      ? { start: loop.start, end: Math.min(MAX, loop.end), on: loop.on !== false } : null;
     if (!p.tracks.length) this.addLine(p, "drums", "Drums", "hard");
     return p;
   },

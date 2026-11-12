@@ -1,0 +1,1232 @@
+{
+  "kind": "lines",
+  "version": 1,
+  "name": "First attempt",
+  "bpm": 120,
+  "mix": {
+    "master": 1,
+    "reverbReturn": 0.8,
+    "reverbSize": 2.2,
+    "delayReturn": 0.7,
+    "delayTime": "1/8d",
+    "delayFeedback": 0.35
+  },
+  "loop": {
+    "start": 0,
+    "end": 48,
+    "on": true
+  },
+  "lines": [
+    {
+      "id": "ln_mwdbio0bfxyyz",
+      "name": "Drums",
+      "type": "drums",
+      "preset": "hard",
+      "params": {},
+      "volume": 1,
+      "pan": 0,
+      "mute": false,
+      "solo": false,
+      "fx": {
+        "lowCut": 20,
+        "eqLow": 0,
+        "eqMid": 0,
+        "eqMidFreq": 1000,
+        "eqHigh": 0,
+        "comp": 0,
+        "chorus": 0,
+        "reverb": 0,
+        "delay": 0,
+        "duckSource": "",
+        "duck": 0.6,
+        "duckRelease": 180
+      },
+      "size": "m",
+      "notes": [
+        {
+          "step": 0,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 2,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 4,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 6,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 8,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 10,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 12,
+          "len": 1,
+          "key": "hat",
+          "vel": 0.8
+        },
+        {
+          "step": 14,
+          "len": 1,
+          "key": "ltom",
+          "vel": 0.8
+        },
+        {
+          "step": 15,
+          "len": 1,
+          "key": "hat",
+          "vel": 0.8
+        },
+        {
+          "step": 16,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 17,
+          "len": 1,
+          "key": "rim",
+          "vel": 0.8
+        },
+        {
+          "step": 18,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 20,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 22,
+          "len": 1,
+          "key": "rim",
+          "vel": 0.8
+        },
+        {
+          "step": 21,
+          "len": 1,
+          "key": "rim",
+          "vel": 0.8
+        },
+        {
+          "step": 23,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 25,
+          "len": 1,
+          "key": "rim",
+          "vel": 0.8
+        },
+        {
+          "step": 26,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 28,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 29,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 30,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 31,
+          "len": 1,
+          "key": "rim",
+          "vel": 0.8
+        },
+        {
+          "step": 19,
+          "len": 1,
+          "key": "ltom",
+          "vel": 0.8
+        },
+        {
+          "step": 24,
+          "len": 1,
+          "key": "kick",
+          "vel": 0.8
+        },
+        {
+          "step": 28,
+          "len": 1,
+          "key": "kick",
+          "vel": 0.8
+        },
+        {
+          "step": 30,
+          "len": 1,
+          "key": "kick",
+          "vel": 0.8
+        },
+        {
+          "step": 22,
+          "len": 1,
+          "key": "snare",
+          "vel": 0.8
+        },
+        {
+          "step": 32,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 33,
+          "len": 1,
+          "key": "rim",
+          "vel": 0.8
+        },
+        {
+          "step": 34,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 35,
+          "len": 1,
+          "key": "ltom",
+          "vel": 0.8
+        },
+        {
+          "step": 36,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 37,
+          "len": 1,
+          "key": "rim",
+          "vel": 0.8
+        },
+        {
+          "step": 38,
+          "len": 1,
+          "key": "rim",
+          "vel": 0.8
+        },
+        {
+          "step": 38,
+          "len": 1,
+          "key": "snare",
+          "vel": 0.8
+        },
+        {
+          "step": 40,
+          "len": 1,
+          "key": "kick",
+          "vel": 0.8
+        },
+        {
+          "step": 39,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 41,
+          "len": 1,
+          "key": "rim",
+          "vel": 0.8
+        },
+        {
+          "step": 42,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 44,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 45,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 44,
+          "len": 1,
+          "key": "kick",
+          "vel": 0.8
+        },
+        {
+          "step": 46,
+          "len": 1,
+          "key": "kick",
+          "vel": 0.8
+        },
+        {
+          "step": 46,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 47,
+          "len": 1,
+          "key": "rim",
+          "vel": 0.8
+        },
+        {
+          "step": 48,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 50,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 52,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 54,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 56,
+          "len": 1,
+          "key": "kick",
+          "vel": 0.8
+        },
+        {
+          "step": 58,
+          "len": 1,
+          "key": "hat",
+          "vel": 0.8
+        },
+        {
+          "step": 59,
+          "len": 1,
+          "key": "ltom",
+          "vel": 0.8
+        },
+        {
+          "step": 59,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 60,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 61,
+          "len": 1,
+          "key": "ltom",
+          "vel": 0.8
+        },
+        {
+          "step": 62,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 63,
+          "len": 1,
+          "key": "ltom",
+          "vel": 0.8
+        },
+        {
+          "step": 62,
+          "len": 1,
+          "key": "snare",
+          "vel": 0.8
+        },
+        {
+          "step": 65,
+          "key": "rim",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 66,
+          "key": "mtom",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 67,
+          "key": "ltom",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 68,
+          "key": "htom",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 69,
+          "key": "rim",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 70,
+          "key": "rim",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 70,
+          "key": "snare",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 71,
+          "key": "mtom",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 73,
+          "key": "rim",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 74,
+          "key": "mtom",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 76,
+          "key": "htom",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 77,
+          "key": "htom",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 76,
+          "key": "kick",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 78,
+          "key": "kick",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 78,
+          "key": "mtom",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 79,
+          "key": "rim",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 81,
+          "key": "rim",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 82,
+          "key": "mtom",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 83,
+          "key": "ltom",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 84,
+          "key": "htom",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 85,
+          "key": "rim",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 86,
+          "key": "rim",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 86,
+          "key": "snare",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 87,
+          "key": "mtom",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 89,
+          "key": "rim",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 90,
+          "key": "mtom",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 92,
+          "key": "htom",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 93,
+          "key": "htom",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 92,
+          "key": "kick",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 94,
+          "key": "kick",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 94,
+          "key": "mtom",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 95,
+          "key": "rim",
+          "len": 1,
+          "vel": 0.8
+        },
+        {
+          "step": 96,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 98,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 100,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 102,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 104,
+          "len": 1,
+          "key": "kick",
+          "vel": 0.8
+        },
+        {
+          "step": 106,
+          "len": 1,
+          "key": "hat",
+          "vel": 0.8
+        },
+        {
+          "step": 107,
+          "len": 1,
+          "key": "ltom",
+          "vel": 0.8
+        },
+        {
+          "step": 107,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 108,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 109,
+          "len": 1,
+          "key": "ltom",
+          "vel": 0.8
+        },
+        {
+          "step": 110,
+          "len": 1,
+          "key": "snare",
+          "vel": 0.8
+        },
+        {
+          "step": 110,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 111,
+          "len": 1,
+          "key": "ltom",
+          "vel": 0.8
+        }
+      ]
+    },
+    {
+      "id": "ln_mwdbio0bpsk3s",
+      "name": "Bass",
+      "type": "bass-guitar",
+      "preset": "pick-bass",
+      "params": {},
+      "volume": 1,
+      "pan": 0,
+      "mute": false,
+      "solo": false,
+      "fx": {
+        "lowCut": 20,
+        "eqLow": 0,
+        "eqMid": 0,
+        "eqMidFreq": 1000,
+        "eqHigh": 0,
+        "comp": 0,
+        "chorus": 0,
+        "reverb": 0,
+        "delay": 0,
+        "duckSource": "",
+        "duck": 0.6,
+        "duckRelease": 180
+      },
+      "size": "m",
+      "notes": [
+        {
+          "step": 14,
+          "len": 1,
+          "key": 40,
+          "vel": 0.8
+        },
+        {
+          "step": 15,
+          "len": 2,
+          "key": 41,
+          "vel": 0.8
+        },
+        {
+          "step": 12,
+          "len": 2,
+          "key": 43,
+          "vel": 0.8
+        },
+        {
+          "step": 18,
+          "len": 1,
+          "key": 41,
+          "vel": 0.8
+        },
+        {
+          "step": 19,
+          "len": 2,
+          "key": 43,
+          "vel": 0.8
+        },
+        {
+          "step": 21,
+          "len": 1,
+          "key": 40,
+          "vel": 0.8
+        },
+        {
+          "step": 22,
+          "len": 2,
+          "key": 40,
+          "vel": 0.8
+        },
+        {
+          "step": 24,
+          "len": 1,
+          "key": 45,
+          "vel": 0.8
+        },
+        {
+          "step": 26,
+          "len": 2,
+          "key": 45,
+          "vel": 0.8
+        },
+        {
+          "step": 25,
+          "len": 1,
+          "key": 43,
+          "vel": 0.8
+        },
+        {
+          "step": 27,
+          "len": 2,
+          "key": 41,
+          "vel": 0.8
+        },
+        {
+          "step": 29,
+          "len": 1,
+          "key": 41,
+          "vel": 0.8
+        },
+        {
+          "step": 30,
+          "len": 2,
+          "key": 43,
+          "vel": 0.8
+        },
+        {
+          "step": 32,
+          "len": 1,
+          "key": 41,
+          "vel": 0.8
+        },
+        {
+          "step": 34,
+          "len": 1,
+          "key": 41,
+          "vel": 0.8
+        },
+        {
+          "step": 35,
+          "len": 2,
+          "key": 43,
+          "vel": 0.8
+        },
+        {
+          "step": 37,
+          "len": 1,
+          "key": 40,
+          "vel": 0.8
+        },
+        {
+          "step": 38,
+          "len": 2,
+          "key": 40,
+          "vel": 0.8
+        },
+        {
+          "step": 40,
+          "len": 1,
+          "key": 45,
+          "vel": 0.8
+        },
+        {
+          "step": 41,
+          "len": 1,
+          "key": 43,
+          "vel": 0.8
+        },
+        {
+          "step": 42,
+          "len": 2,
+          "key": 45,
+          "vel": 0.8
+        },
+        {
+          "step": 43,
+          "len": 2,
+          "key": 41,
+          "vel": 0.8
+        },
+        {
+          "step": 45,
+          "len": 1,
+          "key": 41,
+          "vel": 0.8
+        },
+        {
+          "step": 46,
+          "len": 2,
+          "key": 43,
+          "vel": 0.8
+        },
+        {
+          "step": 48,
+          "len": 2,
+          "key": 33,
+          "vel": 0.8
+        },
+        {
+          "step": 50,
+          "len": 2,
+          "key": 35,
+          "vel": 0.8
+        },
+        {
+          "step": 52,
+          "len": 2,
+          "key": 36,
+          "vel": 0.8
+        },
+        {
+          "step": 53,
+          "len": 2,
+          "key": 35,
+          "vel": 0.8
+        },
+        {
+          "step": 54,
+          "len": 3,
+          "key": 40,
+          "vel": 0.8
+        },
+        {
+          "step": 57,
+          "len": 2,
+          "key": 41,
+          "vel": 0.8
+        },
+        {
+          "step": 59,
+          "len": 2,
+          "key": 40,
+          "vel": 0.8
+        },
+        {
+          "step": 62,
+          "len": 2,
+          "key": 43,
+          "vel": 0.8
+        },
+        {
+          "step": 61,
+          "len": 1,
+          "key": 43,
+          "vel": 0.8
+        },
+        {
+          "step": 64,
+          "len": 2,
+          "key": 48,
+          "vel": 0.8
+        },
+        {
+          "step": 66,
+          "len": 2,
+          "key": 47,
+          "vel": 0.8
+        },
+        {
+          "step": 72,
+          "len": 2,
+          "key": 48,
+          "vel": 0.8
+        },
+        {
+          "step": 74,
+          "len": 2,
+          "key": 47,
+          "vel": 0.8
+        },
+        {
+          "step": 68,
+          "len": 2,
+          "key": 40,
+          "vel": 0.8
+        },
+        {
+          "step": 70,
+          "len": 2,
+          "key": 40,
+          "vel": 0.8
+        },
+        {
+          "step": 76,
+          "len": 1,
+          "key": 41,
+          "vel": 0.8
+        },
+        {
+          "step": 78,
+          "len": 1,
+          "key": 43,
+          "vel": 0.8
+        },
+        {
+          "step": 77,
+          "len": 1,
+          "key": 42,
+          "vel": 0.8
+        },
+        {
+          "step": 79,
+          "len": 1,
+          "key": 43,
+          "vel": 0.8
+        },
+        {
+          "step": 80,
+          "len": 2,
+          "key": 33,
+          "vel": 0.8
+        },
+        {
+          "step": 82,
+          "len": 2,
+          "key": 35,
+          "vel": 0.8
+        },
+        {
+          "step": 84,
+          "len": 2,
+          "key": 36,
+          "vel": 0.8
+        },
+        {
+          "step": 85,
+          "len": 2,
+          "key": 35,
+          "vel": 0.8
+        },
+        {
+          "step": 86,
+          "len": 3,
+          "key": 40,
+          "vel": 0.8
+        },
+        {
+          "step": 89,
+          "len": 2,
+          "key": 41,
+          "vel": 0.8
+        },
+        {
+          "step": 91,
+          "len": 2,
+          "key": 40,
+          "vel": 0.8
+        },
+        {
+          "step": 93,
+          "len": 2,
+          "key": 43,
+          "vel": 0.8
+        },
+        {
+          "step": 95,
+          "len": 1,
+          "key": 43,
+          "vel": 0.8
+        },
+        {
+          "step": 96,
+          "len": 2,
+          "key": 48,
+          "vel": 0.8
+        },
+        {
+          "step": 98,
+          "len": 2,
+          "key": 47,
+          "vel": 0.8
+        },
+        {
+          "step": 100,
+          "len": 2,
+          "key": 40,
+          "vel": 0.8
+        },
+        {
+          "step": 102,
+          "len": 2,
+          "key": 40,
+          "vel": 0.8
+        },
+        {
+          "step": 104,
+          "len": 2,
+          "key": 48,
+          "vel": 0.8
+        },
+        {
+          "step": 106,
+          "len": 2,
+          "key": 47,
+          "vel": 0.8
+        },
+        {
+          "step": 108,
+          "len": 1,
+          "key": 41,
+          "vel": 0.8
+        },
+        {
+          "step": 109,
+          "len": 1,
+          "key": 42,
+          "vel": 0.8
+        },
+        {
+          "step": 110,
+          "len": 1,
+          "key": 43,
+          "vel": 0.8
+        },
+        {
+          "step": 111,
+          "len": 1,
+          "key": 47,
+          "vel": 0.8
+        }
+      ]
+    },
+    {
+      "id": "ln_mwdbio0ba9f3x",
+      "name": "Guitar",
+      "type": "guitar",
+      "preset": "funk",
+      "params": {},
+      "volume": 1,
+      "pan": 0,
+      "mute": false,
+      "solo": false,
+      "fx": {
+        "lowCut": 20,
+        "eqLow": 0,
+        "eqMid": 0,
+        "eqMidFreq": 1000,
+        "eqHigh": 0,
+        "comp": 0,
+        "chorus": 0,
+        "reverb": 0,
+        "delay": 0,
+        "duckSource": "",
+        "duck": 0.6,
+        "duckRelease": 180
+      },
+      "size": "m",
+      "notes": []
+    },
+    {
+      "id": "ln_mwdfevzn9qls4",
+      "name": "Soft Keys",
+      "type": "synth",
+      "preset": "dark-pad",
+      "params": {},
+      "volume": 1,
+      "pan": 0,
+      "mute": false,
+      "solo": false,
+      "fx": {
+        "lowCut": 20,
+        "eqLow": 0,
+        "eqMid": 0,
+        "eqMidFreq": 1000,
+        "eqHigh": 0,
+        "comp": 0,
+        "chorus": 0,
+        "reverb": 0,
+        "delay": 0,
+        "duckSource": "",
+        "duck": 0.6,
+        "duckRelease": 180
+      },
+      "size": "m",
+      "notes": [
+        {
+          "step": 12,
+          "len": 2,
+          "key": 67,
+          "vel": 0.8
+        },
+        {
+          "step": 14,
+          "len": 2,
+          "key": 64,
+          "vel": 0.8
+        },
+        {
+          "step": 15,
+          "len": 2,
+          "key": 65,
+          "vel": 0.8
+        },
+        {
+          "step": 18,
+          "len": 1,
+          "key": 65,
+          "vel": 0.8
+        },
+        {
+          "step": 19,
+          "len": 2,
+          "key": 67,
+          "vel": 0.8
+        },
+        {
+          "step": 21,
+          "len": 1,
+          "key": 64,
+          "vel": 0.8
+        },
+        {
+          "step": 22,
+          "len": 2,
+          "key": 64,
+          "vel": 0.8
+        },
+        {
+          "step": 24,
+          "len": 1,
+          "key": 69,
+          "vel": 0.8
+        },
+        {
+          "step": 25,
+          "len": 1,
+          "key": 67,
+          "vel": 0.8
+        },
+        {
+          "step": 26,
+          "len": 2,
+          "key": 69,
+          "vel": 0.8
+        },
+        {
+          "step": 27,
+          "len": 2,
+          "key": 65,
+          "vel": 0.8
+        },
+        {
+          "step": 29,
+          "len": 1,
+          "key": 65,
+          "vel": 0.8
+        },
+        {
+          "step": 30,
+          "len": 2,
+          "key": 67,
+          "vel": 0.8
+        },
+        {
+          "step": 32,
+          "len": 1,
+          "key": 65,
+          "vel": 0.8
+        },
+        {
+          "step": 34,
+          "len": 1,
+          "key": 65,
+          "vel": 0.8
+        },
+        {
+          "step": 35,
+          "len": 2,
+          "key": 67,
+          "vel": 0.8
+        },
+        {
+          "step": 37,
+          "len": 1,
+          "key": 64,
+          "vel": 0.8
+        },
+        {
+          "step": 38,
+          "len": 2,
+          "key": 64,
+          "vel": 0.8
+        }
+      ]
+    }
+  ],
+  "id": "seq_mwdflxz43he",
+  "savedAt": 1794480923200
+}

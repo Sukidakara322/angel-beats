@@ -18,7 +18,22 @@
  * controls show below.
  * A line's −/+ buttons make it shorter / taller (smallest = a one-row overview).
  *
- * Ruler: drag to loop a region, click to clear the loop.
+ * Select / copy / paste (inside one line):
+ *   Ctrl + drag          → select the notes in a box (Shift + Ctrl + drag adds) · Ctrl + click = one note
+ *   Shift + click a note → add it to / take it out of the selection · Ctrl + A = whole line
+ *   drag a selected note → move the whole selection (time and pitch)
+ *   Ctrl + C / X / V / D → copy / cut / paste / duplicate · Delete → delete · Esc → deselect
+ *   Paste goes right after the selected block (the box you drew, silence included —
+ *   or the notes rounded out to beats), so pressing Ctrl + V again keeps extending
+ *   it. The pasted notes become the selection. Select another line of the same kind
+ *   to paste there (same position in time).
+ *
+ * Loop (play only a part, over and over):
+ *   drag on the ruler          → draw a loop (and switch looping on)
+ *   drag its edge handles      → move its start / end · drag its middle → slide it
+ *   from / to fields           → type the positions ("3", "3.2", "3.2.4")
+ *   ⟲ Loop button / L key      → looping on / off (the region is kept while off)
+ * Snap: beats when zoomed in, bars when far out; hold Alt for single steps.
  * Shift + wheel / scrollbar → scroll · Fit = whole song.
  * Zoom ↔ (Ctrl + wheel): 3…96 px per step · Zoom ↕ (Alt + wheel): 12…32 px per
  * pitch row — zoomed in, note names show inside the notes.
@@ -78,7 +93,14 @@ SoundPad.LinesView = class LinesView {
     this.drag = null;
     this.vel = null;
     this._lastLength = SoundPad.Lines.length(project);
+    // Selected notes: always inside ONE line. `region` = the block they stand for (what Copy copies,
+    // silence included), in steps — from the box you drew, or rounded out to beats around the notes.
+    this.sel = { trackId: null, notes: new Set(), region: null };
   }
+
+  /** Copied notes (kept across rebuilds of the view, e.g. after adding a line). */
+  get clipboard() { return SoundPad.LinesView.prefs.clipboard; }
+  set clipboard(v) { SoundPad.LinesView.prefs.clipboard = v; }
 
   get P() { return SoundPad.Project; }
   get L() { return SoundPad.Lines; }
@@ -122,12 +144,30 @@ SoundPad.LinesView = class LinesView {
               <button class="tbtn small" data-act="rowsIn">+</button>
             </div>
             <button class="tbtn small" data-act="fit" title="Zoom to show the whole song">Fit song</button>
-            <button class="tbtn small" data-act="unloop" title="Play the whole song">Clear loop</button>
+            <div class="loop-ctrl" title="Loop a part of the song: playback repeats from → to. Drag on the ruler to draw it, its edges to resize, its middle to move it.">
+              <button class="tbtn small loop-toggle" data-act="loop" title="Loop on / off (L) — the region is kept while off">⟲ Loop</button>
+              <label>from <input class="loop-in" data-role="loopFrom" placeholder="1" spellcheck="false" title="Where the loop starts: bar, or bar.beat (3.2), or bar.beat.step"></label>
+              <label>to <input class="loop-in" data-role="loopTo" placeholder="—" spellcheck="false" title="Where the loop ends (it plays up to here): bar, bar.beat or bar.beat.step — e.g. 5 = the start of bar 5"></label>
+              <span class="loop-len" data-role="loopLen"></span>
+            </div>
           </div>
         </div>
         <p class="song-hint">Every instrument is one line, all on the same timeline — write each melody right where it plays ·
           click to add a note, drag to set its length · drag a note to move it, its end to resize · right-click to delete ·
-          click a line to play it with the keyboard (and record into it) · drag on the ruler to loop</p>
+          click a line to play it with the keyboard (and record into it) · loop a part: drag on the ruler (or type from / to), drag its edges to adjust, L = loop on/off</p>
+        <div class="ln-editbar">
+          <span class="ln-eb-label">Selection</span>
+          <span class="ln-sel-info" data-role="selInfo"></span>
+          <div class="ln-eb-btns">
+            <button class="tbtn small" data-act="selAll" title="Select every note of the selected line (Ctrl + A)">Select all</button>
+            <button class="tbtn small" data-act="copy" title="Copy the selected notes (Ctrl + C)">Copy</button>
+            <button class="tbtn small" data-act="cut" title="Copy and remove them (Ctrl + X)">Cut</button>
+            <button class="tbtn small" data-act="paste" title="Paste right after the selection / the last paste (Ctrl + V) — press again to keep going">Paste</button>
+            <button class="tbtn small" data-act="dup" title="Copy + paste right after it, in one go (Ctrl + D)">Duplicate</button>
+            <button class="tbtn small danger" data-act="del" title="Delete the selected notes (Delete)">Delete</button>
+          </div>
+          <span class="ln-clip-info" data-role="clipInfo"></span>
+        </div>
         <div class="ln-stack" data-role="stack">
           <div class="ln-grid ln-ruler-row">
             <div class="ln-gutter">Bars</div>
@@ -188,12 +228,31 @@ SoundPad.LinesView = class LinesView {
     act("zoomOut", () => this.zoom(-1));
     act("rowsIn", () => this.zoomRows(1));
     act("rowsOut", () => this.zoomRows(-1));
+    act("selAll", () => this.selectAll());
+    act("copy", () => this.copy());
+    act("cut", () => this.cut());
+    act("paste", () => this.paste());
+    act("dup", () => this.duplicate());
+    act("del", () => this.deleteSelection());
+    this.selInfoEl = q("selInfo");
+    this.clipInfoEl = q("clipInfo");
     this.zoomValEl = q("zoomVal");
     this.rowValEl = q("rowVal");
     this._renderZoom();
     act("fit", () => this.fitSong());
-    this.unloopBtn = this.root.querySelector('[data-act="unloop"]');
-    this.unloopBtn.addEventListener("click", () => { this.L.clearLoop(this.project); this._edited(null, true); });
+    // Loop: on/off + typed start / end.
+    this.loopBtn = this.root.querySelector('[data-act="loop"]');
+    this.loopBtn.addEventListener("click", () => this.toggleLoop());
+    this.loopFrom = q("loopFrom");
+    this.loopTo = q("loopTo");
+    this.loopLenEl = q("loopLen");
+    [this.loopFrom, this.loopTo].forEach((input) => {
+      input.addEventListener("change", () => this._typedLoop());
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") input.blur();          // blur → change
+        if (e.key === "Escape") { this._renderLoop(); input.blur(); }
+      });
+    });
 
     const r = this.ruler;
     r.addEventListener("pointerdown", (e) => this._rulerDown(e));
@@ -426,6 +485,7 @@ SoundPad.LinesView = class LinesView {
 
   select(id) {
     if (id === this.selectedId) return;
+    if (this.sel.trackId && this.sel.trackId !== id) this.clearSelection();   // a selection lives in one line
     this.selectedId = id;
     this._savePrefs();
     this.rows.forEach((row) => {
@@ -652,9 +712,62 @@ SoundPad.LinesView = class LinesView {
     let text = `${n} line${n === 1 ? "" : "s"} · `;
     const bars = L.length(p) / L.BAR;
     text += end ? `${bars} bar${bars === 1 ? "" : "s"} · ${notes} note${notes === 1 ? "" : "s"}` : "empty — click in a line to write notes";
-    if (p.loop) text += ` · looping ${this._fmt(p.loop.start)} → ${this._fmt(p.loop.end)}`;
+    if (L.looping(p)) text += ` · looping ${this._fmt(p.loop.start)} → ${this._fmt(p.loop.end)}`;
     this.statusEl.textContent = text;
-    this.unloopBtn.disabled = !p.loop;
+    this._renderLoop();
+    this._renderSel();
+  }
+
+  // --- Loop controls -------------------------------------------------
+
+  /** Show the loop's state in the header (toggle, from / to, length). */
+  _renderLoop() {
+    if (!this.loopBtn) return;
+    const L = this.L, loop = this.project.loop, on = L.looping(this.project);
+    this.loopBtn.classList.toggle("on", on);
+    this.loopBtn.textContent = on ? "⟲ Loop on" : "⟲ Loop";
+    const typing = (el) => document.activeElement === el;
+    if (!typing(this.loopFrom)) this.loopFrom.value = loop ? L.fmtPos(loop.start) : "";
+    if (!typing(this.loopTo)) this.loopTo.value = loop ? L.fmtPos(loop.end) : "";
+    this.loopFrom.classList.toggle("off", !!loop && !on);
+    this.loopTo.classList.toggle("off", !!loop && !on);
+    this.loopFrom.classList.remove("bad");
+    this.loopTo.classList.remove("bad");
+    let len = "";
+    if (loop) {
+      const steps = loop.end - loop.start;
+      const bars = steps / L.BAR;
+      len = Number.isInteger(bars) ? `${bars} bar${bars === 1 ? "" : "s"}`
+        : steps % 4 === 0 ? `${steps / 4} beats` : `${steps} steps`;
+    }
+    this.loopLenEl.textContent = len;
+  }
+
+  /** L / the toggle: loop on ⇄ off (the region stays). */
+  toggleLoop() {
+    const p = this.project;
+    this.L.setLoopOn(p, !this.L.looping(p));
+    this._edited(null, true);
+  }
+
+  /** From / to typed in: "3", "3.2" or "3.2.4". A typed loop switches looping on. */
+  _typedLoop() {
+    const L = this.L, p = this.project;
+    const from = L.parsePos(this.loopFrom.value);
+    const to = L.parsePos(this.loopTo.value);
+    const badFrom = this.loopFrom.value.trim() !== "" && from === null;
+    const badTo = this.loopTo.value.trim() !== "" && to === null;
+    const start = from ?? (p.loop ? p.loop.start : 0);
+    const end = to ?? (p.loop ? p.loop.end : start + L.BAR);
+    if (badFrom || badTo || end <= start) {
+      // Not a valid region: show which field is wrong, keep the loop as it was.
+      this.loopFrom.classList.toggle("bad", badFrom || (!badTo && end <= start));
+      this.loopTo.classList.toggle("bad", badTo || (!badFrom && end <= start));
+      return;
+    }
+    L.setLoop(p, start, end);
+    L.setLoopOn(p, true);
+    this._edited(null, true);
   }
 
   _fmt(step) {
@@ -742,18 +855,27 @@ SoundPad.LinesView = class LinesView {
       g.fillStyle = "#ffb454";
       g.fillRect(Math.round(ex) - 1, 0, 2, H);
     }
-    // Loop bracket.
+    // Loop region: a band over the whole ruler with a handle at each end
+    // (blue = looping, grey = kept but off).
     if (p.loop) {
-      const lx = this._x(p.loop.start), lw = (p.loop.end - p.loop.start) * pps;
+      const on = L.looping(p);
+      const lx = this._x(p.loop.start), rx = this._x(p.loop.end);
+      const hot = this._loopHover;
       g.save();
       g.beginPath();
       g.rect(LW, 0, W - LW, H);
       g.clip();
-      g.fillStyle = "rgba(77, 163, 255, 0.35)";
-      g.fillRect(lx, H - 9, lw, 8);
-      g.fillStyle = "#4da3ff";
-      g.fillRect(lx, H - 9, 2, 8);
-      g.fillRect(lx + lw - 2, H - 9, 2, 8);
+      g.fillStyle = on ? "rgba(77, 163, 255, 0.2)" : "rgba(138, 148, 163, 0.12)";
+      g.fillRect(lx, 0, rx - lx, H);
+      g.fillStyle = on ? "#4da3ff" : "#5a6472";
+      g.fillRect(lx, 0, rx - lx, 4);                       // top bar
+      const handle = (x, which) => {
+        const wide = hot === which || (this.loopDrag && this.loopDrag.mode === which);
+        g.fillStyle = on ? (wide ? "#9fcbff" : "#4da3ff") : (wide ? "#8a94a3" : "#5a6472");
+        g.fillRect(x - (wide ? 3 : 2), 0, wide ? 6 : 4, H);
+      };
+      handle(lx, "start");
+      handle(rx, "end");
       g.restore();
     }
     g.fillStyle = "#2a323d";
@@ -768,9 +890,9 @@ SoundPad.LinesView = class LinesView {
     if (row.rt.track.size === "min") this._drawOverview(row);
     else this._drawRoll(row);
 
-    // Past the song end, and the loop region.
+    // Past the song end, or (looping) the loop region.
     const p = this.project;
-    if (!p.loop) {
+    if (!this.L.looping(p)) {
       const ex = this._x(this.L.length(p));
       if (ex < W) {
         g.fillStyle = "rgba(8, 10, 14, 0.38)";
@@ -782,6 +904,13 @@ SoundPad.LinesView = class LinesView {
         g.fillStyle = "rgba(77, 163, 255, 0.07)";
         g.fillRect(lx, 0, rx - lx, H);
       }
+      // Outside the loop doesn't play: dim it a little, and mark the edges.
+      g.fillStyle = "rgba(8, 10, 14, 0.22)";
+      if (lx > LW) g.fillRect(LW, 0, lx - LW, H);
+      if (rx < W) g.fillRect(rx, 0, W - rx, H);
+      g.fillStyle = "rgba(77, 163, 255, 0.55)";
+      if (this._x(p.loop.start) >= LW) g.fillRect(Math.round(this._x(p.loop.start)), 0, 1, H);
+      if (this._x(p.loop.end) <= W) g.fillRect(Math.round(this._x(p.loop.end)) - 1, 0, 1, H);
     }
     if (row.silent) {
       g.fillStyle = "rgba(14, 17, 22, 0.6)";
@@ -808,7 +937,21 @@ SoundPad.LinesView = class LinesView {
     }
     this._grid(g, 0, H);
 
-    // Notes, in the line's colour (brightness = velocity).
+    // The selected block (what Copy takes, silence included).
+    const selHere = this.sel.trackId === row.rt.track.id && this.sel.notes.size > 0;
+    const region = selHere ? this._selRegion() : null;
+    if (region) {
+      const rx0 = Math.max(LW, this._x(region.start)), rx1 = Math.min(W, this._x(region.end));
+      if (rx1 > rx0) {
+        g.fillStyle = "rgba(255, 255, 255, 0.05)";
+        g.fillRect(rx0, 0, rx1 - rx0, H);
+        g.fillStyle = "rgba(255, 255, 255, 0.45)";
+        if (this._x(region.start) >= LW) g.fillRect(Math.round(rx0), 0, 1, H);
+        if (this._x(region.end) <= W) g.fillRect(Math.round(rx1) - 1, 0, 1, H);
+      }
+    }
+
+    // Notes, in the line's colour (brightness = velocity); selected ones bright with a white frame.
     const color = row.color;
     const index = row.drums ? new Map(keys.map((k, i) => [k, i])) : null;
     const top = keys[0];
@@ -824,12 +967,20 @@ SoundPad.LinesView = class LinesView {
       const w = Math.max(3, (row.drums ? 1 : n.len) * pps - 2);
       if (x + w < LW || x > W) continue;
       const y = yOf(i) + 1, h = RH - 3;
-      g.globalAlpha = 0.35 + 0.65 * n.vel;
+      const picked = selHere && this.sel.notes.has(n);
+      g.globalAlpha = picked ? 1 : 0.35 + 0.65 * n.vel;
       g.fillStyle = color;
       g.fillRect(x, y, w, h);
       g.globalAlpha = 1;
-      g.strokeStyle = "rgba(255, 255, 255, 0.55)";
-      g.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+      if (picked) {
+        g.lineWidth = 2;
+        g.strokeStyle = "#ffffff";
+        g.strokeRect(x + 1, y + 1, w - 2, h - 2);
+        g.lineWidth = 1;
+      } else {
+        g.strokeStyle = "rgba(255, 255, 255, 0.55)";
+        g.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+      }
       if (!row.drums && w > 12) {          // resize grip on the right edge
         g.fillStyle = "rgba(14, 17, 22, 0.5)";
         g.fillRect(x + w - 4, y + 2, 2, h - 4);
@@ -845,6 +996,19 @@ SoundPad.LinesView = class LinesView {
         g.fillText(SoundPad.midiName(n.key), Math.max(LW, x) + 4, y + h / 2 + 0.5);
         g.restore();
       }
+    }
+
+    // The selection box being dragged.
+    const d = this.drag;
+    if (d && d.mode === "marquee" && d.row === row) {
+      const bx0 = this._x(Math.min(d.s0, d.s1)), bx1 = this._x(Math.max(d.s0, d.s1));
+      const by0 = Math.min(d.r0, d.r1) * RH - row.scrollY, by1 = Math.max(d.r0, d.r1) * RH - row.scrollY;
+      g.fillStyle = "rgba(255, 255, 255, 0.08)";
+      g.fillRect(bx0, by0, bx1 - bx0, by1 - by0);
+      g.setLineDash([4, 3]);
+      g.strokeStyle = "#ffffff";
+      g.strokeRect(bx0 + 0.5, by0 + 0.5, bx1 - bx0 - 1, by1 - by0 - 1);
+      g.setLineDash([]);
     }
 
     // Row labels (stay put while the grid scrolls); the text grows with the rows.
@@ -917,6 +1081,151 @@ SoundPad.LinesView = class LinesView {
     g.fillText("click to open", 4, H / 2);
   }
 
+  // --- Selection / clipboard -------------------------------------------
+
+  _rowOf(trackId) {
+    return this.rows.find((r) => r.rt.track.id === trackId) || null;
+  }
+
+  /** The selected notes that still exist (edits elsewhere may have removed some). */
+  _selNotes() {
+    const row = this._rowOf(this.sel.trackId);
+    if (!row || !this.sel.notes.size) return [];
+    const live = row.rt.track.notes.filter((n) => this.sel.notes.has(n));
+    if (live.length !== this.sel.notes.size) this.sel.notes = new Set(live);
+    return live;
+  }
+
+  _isSel(row, note) {
+    return this.sel.trackId === row.rt.track.id && this.sel.notes.has(note);
+  }
+
+  /** Select `notes` of `row` (region = the block they stand for, or null = around the notes). */
+  _setSel(row, notes, region = null) {
+    const prev = this._rowOf(this.sel.trackId);
+    this.sel = { trackId: row ? row.rt.track.id : null, notes: new Set(notes), region };
+    if (prev && prev !== row) this._drawRow(prev);
+    if (row) this._drawRow(row);
+    this._renderSel();
+  }
+
+  clearSelection() {
+    if (!this.sel.trackId && !this.sel.notes.size) return;
+    this._setSel(null, []);
+  }
+
+  /** The selected block in steps: the drawn box, or the notes rounded out to whole beats. */
+  _selRegion() {
+    const notes = this._selNotes();
+    if (!notes.length) return null;
+    if (this.sel.region) return this.sel.region;
+    const start = Math.min(...notes.map((n) => n.step));
+    const end = Math.max(...notes.map((n) => n.step + n.len));
+    return { start: Math.floor(start / 4) * 4, end: Math.max(Math.ceil(end / 4) * 4, Math.floor(start / 4) * 4 + 4) };
+  }
+
+  /** Ctrl + A: every note of the selected line (the block = bar 1 → its last bar). */
+  selectAll() {
+    const row = this.selectedRow;
+    if (!row || !row.rt.track.notes.length) return;
+    const end = Math.max(...row.rt.track.notes.map((n) => n.step + n.len));
+    this._setSel(row, row.rt.track.notes, { start: 0, end: this.L._ceilBar(end) });
+  }
+
+  /** Ctrl + C: remember the selected notes, relative to the start of their block. */
+  copy() {
+    const notes = this._selNotes();
+    const row = this._rowOf(this.sel.trackId);
+    if (!notes.length || !row) return false;
+    const region = this._selRegion();
+    this.clipboard = {
+      drums: row.drums,
+      from: row.rt.track.name,
+      start: region.start,
+      span: region.end - region.start,
+      notes: notes.map((n) => ({ d: n.step - region.start, key: n.key, len: n.len, vel: n.vel })),
+      next: { [row.rt.track.id]: region.end },     // per line: where the next paste goes
+    };
+    this._renderSel();
+    return true;
+  }
+
+  cut() {
+    if (this.copy()) this.deleteSelection();
+  }
+
+  /**
+   * Ctrl + V into the selected line: right after the selected block (so pasting
+   * again and again keeps extending it), or after the last paste / where it was
+   * copied. The pasted notes become the selection — drag them anywhere.
+   */
+  paste() {
+    const cb = this.clipboard, row = this.selectedRow;
+    if (!cb || !row) return;
+    if (cb.drums !== row.drums) {
+      this.selInfoEl.textContent = cb.drums ? "Drum hits can only be pasted into a drum line" : "Notes can't be pasted into a drum line";
+      return;
+    }
+    const id = row.rt.track.id, MAX = this.L.MAX_STEPS;
+    const selHere = this.sel.trackId === id && this._selNotes().length;
+    const at = selHere ? this._selRegion().end : (cb.next[id] ?? cb.start);
+    if (at >= MAX) return;
+    const keys = new Set(row.keys);
+    const fresh = cb.notes
+      .filter((n) => keys.has(n.key) && at + n.d < MAX)
+      .map((n) => ({ step: at + n.d, key: n.key, len: Math.min(n.len, MAX - at - n.d), vel: n.vel }));
+    // Pasted notes replace notes that start on the same step + pitch.
+    const taken = new Set(fresh.map((n) => n.step + "|" + n.key));
+    row.rt.track.notes = row.rt.track.notes.filter((n) => !taken.has(n.step + "|" + n.key)).concat(fresh);
+    cb.next[id] = at + cb.span;
+    this._setSel(row, fresh, { start: at, end: at + cb.span });
+    // Bring the pasted block into view.
+    const x0 = this._x(at), x1 = this._x(at + cb.span);
+    if (x1 > this.W || x0 < this.LABEL_W) this._scrollTo(Math.max(0, at * this.pps - 40));
+    this._edited(row, true);
+  }
+
+  /** Ctrl + D: copy + paste right after, in one go. */
+  duplicate() {
+    if (this.copy()) this.paste();
+  }
+
+  deleteSelection() {
+    const notes = this._selNotes();
+    const row = this._rowOf(this.sel.trackId);
+    if (!notes.length || !row) return;
+    const gone = new Set(notes);
+    row.rt.track.notes = row.rt.track.notes.filter((n) => !gone.has(n));
+    this._setSel(row, [], null);
+    this._edited(row, true);
+  }
+
+  /** The edit bar: what's selected, what's copied, which buttons work. */
+  _renderSel() {
+    if (!this.selInfoEl) return;
+    const notes = this._selNotes();
+    const row = this._rowOf(this.sel.trackId);
+    const L = this.L, cb = this.clipboard;
+    if (notes.length && row) {
+      const r = this._selRegion();
+      this.selInfoEl.textContent = `${notes.length} note${notes.length === 1 ? "" : "s"} in ${row.rt.track.name} · ${L.fmtPos(r.start)} → ${L.fmtPos(r.end)}`;
+      this.selInfoEl.classList.add("on");
+    } else {
+      this.selInfoEl.textContent = "Ctrl + drag in a line to select notes · Shift + click adds one · Ctrl + A = whole line";
+      this.selInfoEl.classList.remove("on");
+    }
+    const has = notes.length > 0;
+    const btn = (a) => this.root.querySelector(`[data-act="${a}"]`);
+    ["copy", "cut", "dup", "del"].forEach((a) => (btn(a).disabled = !has));
+    btn("paste").disabled = !cb;
+    btn("selAll").disabled = !this.selectedRow || !this.selectedRow.rt.track.notes.length;
+    if (cb) {
+      const bars = cb.span / L.BAR;
+      const span = Number.isInteger(bars) ? `${bars} bar${bars === 1 ? "" : "s"}` : `${cb.span / 4} beats`;
+      this.clipInfoEl.textContent = `Copied: ${cb.notes.length} note${cb.notes.length === 1 ? "" : "s"} · ${span} (${cb.from})`;
+    } else this.clipInfoEl.textContent = "";
+  }
+
   // --- Mouse: notes --------------------------------------------------
 
   _hit(e, row) {
@@ -925,7 +1234,11 @@ SoundPad.LinesView = class LinesView {
     const raw = Math.floor((x - this.LABEL_W + this.scrollX) / this.pps);
     const step = Math.min(this.L.MAX_STEPS - 1, Math.max(0, raw));
     const i = Math.min(row.keys.length - 1, Math.max(0, Math.floor((y + row.scrollY) / row.rowH)));
-    return { x, y, step, key: row.keys[i], inLabel: x < this.LABEL_W };
+    return {
+      x, y, step, key: row.keys[i], idx: i, inLabel: x < this.LABEL_W,
+      fs: Math.max(0, (x - this.LABEL_W + this.scrollX) / this.pps),     // unrounded step (selection box)
+      fr: Math.max(0, (y + row.scrollY) / row.rowH),                      // unrounded row
+    };
   }
 
   /** Note under (step, key) — for drums, a hit only covers its own step. */
@@ -973,6 +1286,38 @@ SoundPad.LinesView = class LinesView {
     }
     if (e.button !== 0) return;
 
+    // Ctrl + drag: select the notes inside a box (Shift + Ctrl adds to the selection).
+    if (e.ctrlKey || e.metaKey) {
+      const keep = e.shiftKey && this.sel.trackId === track.id ? this._selNotes() : [];
+      this.drag = { mode: "marquee", row, s0: h.fs, r0: h.fr, s1: h.fs, r1: h.fr, keep, alt: e.altKey };
+      this._marqueeSelect(this.drag);          // Ctrl + click on a note selects just that note
+      return;
+    }
+    const hit = this._noteAt(row, h.step, h.key);
+    // Shift + click a note: add it to / take it out of the selection.
+    if (e.shiftKey && hit) {
+      const notes = this.sel.trackId === track.id ? this._selNotes() : [];
+      const next = notes.includes(hit) ? notes.filter((n) => n !== hit) : notes.concat(hit);
+      this._setSel(row, next, null);
+      return;
+    }
+    // Drag a selected note: the whole selection moves with it.
+    if (hit && this._isSel(row, hit) && (row.drums || !this._onEdge(hit, h.x))) {
+      const notes = this._selNotes();
+      this.drag = {
+        mode: "moveSel", row, s0: h.step, i0: h.idx, grabbed: hit, moved: false,
+        base: notes.map((n) => ({ n, step: n.step, i: row.keys.indexOf(n.key) })),
+        region: this.sel.region ? { ...this.sel.region } : null,
+      };
+      this._sound(row, hit.key, hit.vel);
+      return;
+    }
+    // With a selection, a click elsewhere just deselects (no note is added by accident).
+    if (this._selNotes().length) {
+      this.clearSelection();
+      if (!hit) return;
+    }
+
     if (row.drums) {
       const on = !P.findNote(line, h.step, h.key);
       P.setNote(line, h.step, h.key, on);
@@ -985,7 +1330,6 @@ SoundPad.LinesView = class LinesView {
       return;
     }
 
-    const hit = this._noteAt(row, h.step, h.key);
     if (hit && this._onEdge(hit, h.x)) {
       this.drag = { mode: "resize", row, note: hit, moved: true };
     } else if (hit) {
@@ -1016,7 +1360,14 @@ SoundPad.LinesView = class LinesView {
       else if (h.x < this.LABEL_W + 10 && this.scrollX > 0) this._scrollTo(this.scrollX - this.pps / 2);
     }
 
-    if (d.mode === "erase") {
+    if (d.mode === "marquee") {
+      d.s1 = h.fs;
+      d.r1 = h.fr;
+      d.alt = e.altKey;
+      this._marqueeSelect(d);
+    } else if (d.mode === "moveSel") {
+      this._moveSelection(d, h);
+    } else if (d.mode === "erase") {
       this._eraseAt(row, h);
     } else if (d.mode === "paint") {
       if (h.inLabel) return;
@@ -1045,7 +1396,64 @@ SoundPad.LinesView = class LinesView {
     const d = this.drag;
     this.drag = null;
     if (d && d.note) this.P.dedupe(row.rt.track, d.note);
+    if (d && d.mode === "marquee") {
+      // A Ctrl + click without dragging selects nothing (and clears the selection).
+      if (!this.sel.notes.size) this.clearSelection();
+      this._drawRow(row);
+      return;
+    }
+    if (d && d.mode === "moveSel" && d.moved) {
+      // Moved notes replace the notes they landed on (same step + pitch).
+      const moved = new Set(d.base.map((b) => b.n));
+      const taken = new Set(d.base.map((b) => b.n.step + "|" + b.n.key));
+      row.rt.track.notes = row.rt.track.notes.filter((n) => moved.has(n) || !taken.has(n.step + "|" + n.key));
+    }
     if (d) this._edited(row, true);
+  }
+
+  /** The box's block in steps (snapped like the ruler: beats zoomed in, bars far out, steps with Alt). */
+  _boxRegion(d) {
+    const unit = d.alt ? 1 : this.pps * 4 >= 16 ? 4 : 16;
+    const a = Math.min(d.s0, d.s1), b = Math.max(d.s0, d.s1);
+    const start = Math.floor(a / unit) * unit;
+    return { start, end: Math.max(start + unit, Math.ceil(b / unit) * unit) };
+  }
+
+  /** Select what's inside the box: notes overlapping its time span, on the rows it covers. */
+  _marqueeSelect(d) {
+    const row = d.row;
+    const a = Math.min(d.s0, d.s1), b = Math.max(d.s0, d.s1);
+    const r0 = Math.floor(Math.min(d.r0, d.r1)), r1 = Math.floor(Math.max(d.r0, d.r1));
+    const inBox = row.rt.track.notes.filter((n) => {
+      const i = row.keys.indexOf(n.key);
+      const len = row.drums ? 1 : n.len;
+      return i >= r0 && i <= r1 && n.step < b && n.step + len > a;
+    });
+    const notes = [...new Set(d.keep.concat(inBox))];
+    this._setSel(row, notes, notes.length && !d.keep.length ? this._boxRegion(d) : null);
+  }
+
+  /** Drag the selection: every selected note moves by the same steps / rows (kept inside the line). */
+  _moveSelection(d, h) {
+    const row = d.row, MAX = this.L.MAX_STEPS;
+    let dS = h.step - d.s0, dI = h.idx - d.i0;
+    const minStep = Math.min(...d.base.map((b) => b.step));
+    const maxEnd = Math.max(...d.base.map((b) => b.step + b.n.len));
+    const minI = Math.min(...d.base.map((b) => b.i)), maxI = Math.max(...d.base.map((b) => b.i));
+    dS = Math.max(-minStep, Math.min(MAX - maxEnd, dS));
+    dI = Math.max(-minI, Math.min(row.keys.length - 1 - maxI, dI));
+    const cur = d.grabbed.step - (d.base.find((b) => b.n === d.grabbed).step);
+    const curI = row.keys.indexOf(d.grabbed.key) - d.base.find((b) => b.n === d.grabbed).i;
+    if (dS === cur && dI === curI) return;
+    d.moved = true;
+    d.base.forEach((b) => {
+      b.n.step = b.step + dS;
+      b.n.key = row.keys[b.i + dI];
+    });
+    if (d.region) this.sel.region = { start: d.region.start + dS, end: d.region.end + dS };
+    if (dI !== curI && !row.drums) this._sound(row, d.grabbed.key, d.grabbed.vel);
+    this._edited(row);
+    this._renderSel();
   }
 
   _eraseAt(row, h) {
@@ -1058,7 +1466,9 @@ SoundPad.LinesView = class LinesView {
 
   _updateCursor(row, h) {
     let cursor = "crosshair";
+    const hit = h.inLabel ? null : this._noteAt(row, h.step, h.key);
     if (h.inLabel) cursor = "pointer";
+    else if (hit && this._isSel(row, hit) && (row.drums || !this._onEdge(hit, h.x))) cursor = "move";
     else if (!row.drums) {
       const note = this._noteAt(row, h.step, h.key);
       if (note) cursor = this._onEdge(note, h.x) ? "ew-resize" : "grab";
@@ -1115,38 +1525,87 @@ SoundPad.LinesView = class LinesView {
 
   // --- Mouse: ruler (loop) -------------------------------------------
 
+  /** Snap unit on the ruler: beats when zoomed in, bars when far out, single steps with Alt. */
+  _rulerUnit(e) {
+    return e.altKey ? 1 : this.pps * 4 >= 16 ? 4 : 16;
+  }
+
+  _rulerX(e) {
+    return e.clientX - this.ruler.getBoundingClientRect().left;
+  }
+
+  /** Song step under the pointer (unsnapped). */
+  _rulerRaw(e) {
+    return Math.max(0, (this._rulerX(e) - this.LABEL_W + this.scrollX) / this.pps);
+  }
+
   _rulerStep(e) {
-    const r = this.ruler.getBoundingClientRect();
-    const x = e.clientX - r.left;
-    const unit = e.altKey ? 1 : this.pps * 4 >= 16 ? 4 : 16;     // beats when zoomed in, else bars
-    const s = Math.max(0, (x - this.LABEL_W + this.scrollX) / this.pps);
-    return Math.round(s / unit) * unit;
+    const unit = this._rulerUnit(e);
+    return Math.round(this._rulerRaw(e) / unit) * unit;
+  }
+
+  /** What part of the loop is under the pointer: "start" / "end" handle, "move" (inside), or null. */
+  _loopPart(e) {
+    const loop = this.project.loop;
+    const x = this._rulerX(e);
+    if (!loop || x < this.LABEL_W) return null;
+    const lx = this._x(loop.start), rx = this._x(loop.end);
+    const grip = Math.min(8, Math.max(4, (rx - lx) / 4));
+    if (Math.abs(x - rx) <= grip) return "end";       // end first: a short loop's handles overlap
+    if (Math.abs(x - lx) <= grip) return "start";
+    if (x > lx && x < rx) return "move";
+    return null;
   }
 
   _rulerDown(e) {
-    if (e.button !== 0 || !this.W) return;
+    if (e.button !== 0 || !this.W || this._rulerX(e) < this.LABEL_W) return;
     try { this.ruler.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
-    this.loopDrag = { anchor: this._rulerStep(e), moved: false };
+    const part = this._loopPart(e);
+    const loop = this.project.loop;
+    if (part === "move") this.loopDrag = { mode: "move", grab: this._rulerRaw(e) - loop.start, moved: false };
+    else if (part) this.loopDrag = { mode: part, moved: false };
+    else this.loopDrag = { mode: "new", anchor: this._rulerStep(e), moved: false };
   }
 
   _rulerMove(e) {
     const d = this.loopDrag;
-    this.ruler.style.cursor = "pointer";
-    if (!d) return;
+    if (!d) {
+      const part = this._loopPart(e);
+      this.ruler.style.cursor = part === "move" ? "grab" : part ? "ew-resize" : "crosshair";
+      if (part !== this._loopHover) { this._loopHover = part; this._drawRuler(); }
+      return;
+    }
+    const L = this.L, p = this.project, unit = this._rulerUnit(e);
     const cur = this._rulerStep(e);
-    if (cur === d.anchor && !d.moved) return;
-    d.moved = true;
-    this.L.setLoop(this.project, d.anchor, cur);
+    if (d.mode === "new") {
+      if (cur === d.anchor && !d.moved) return;
+      d.moved = true;
+      L.setLoop(p, d.anchor, cur);
+      L.setLoopOn(p, true);                    // drawing a loop means "loop this"
+    } else if (d.mode === "start") {
+      const start = Math.min(cur, p.loop.end - 1);
+      if (start === p.loop.start) return;
+      d.moved = true;
+      L.setLoop(p, start, p.loop.end);
+    } else if (d.mode === "end") {
+      const end = Math.max(cur, p.loop.start + 1);
+      if (end === p.loop.end) return;
+      d.moved = true;
+      L.setLoop(p, p.loop.start, end);
+    } else if (d.mode === "move") {
+      const start = Math.max(0, Math.round((this._rulerRaw(e) - d.grab) / unit) * unit);
+      if (start === p.loop.start) return;
+      d.moved = true;
+      L.moveLoop(p, start);
+      this.ruler.style.cursor = "grabbing";
+    }
     this._edited(null, true);
   }
 
   _rulerUp() {
-    const d = this.loopDrag;
+    // A plain click doesn't change the loop (switch it off with ⟲ Loop or L).
     this.loopDrag = null;
-    if (d && !d.moved && this.project.loop) {
-      this.L.clearLoop(this.project);
-      this._edited(null, true);
-    }
+    this._drawRuler();
   }
 
   // --- Sound / keyboard ------------------------------------------------
@@ -1159,7 +1618,26 @@ SoundPad.LinesView = class LinesView {
   }
 
   /** Computer keyboard → the selected line. Returns true if the key was used. */
-  handleKey(k) {
+  handleKey(k, e = {}) {
+    // Editing shortcuts. Any other Ctrl combination is left alone (and never plays a note).
+    if (e.ctrlKey || e.metaKey) {
+      const cmd = { a: () => this.selectAll(), c: () => this.copy(), x: () => this.cut(),
+                    v: () => this.paste(), d: () => this.duplicate() }[k];
+      if (!cmd) return false;
+      cmd();
+      return true;
+    }
+    if (k === "delete" || k === "backspace") {
+      if (!this._selNotes().length) return false;
+      this.deleteSelection();
+      return true;
+    }
+    if (k === "escape") {
+      if (!this._selNotes().length) return false;
+      this.clearSelection();
+      return true;
+    }
+    if (k === "l") { this.toggleLoop(); return true; }
     const row = this.selectedRow;
     if (!row) return false;
     if (row.drums) {
