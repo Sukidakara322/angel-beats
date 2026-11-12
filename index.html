@@ -9,8 +9,13 @@
 <body>
   <header class="topbar">
     <div class="brand">🥁 Sound&nbsp;Pad</div>
+    <div class="mode-switch" role="tablist" title="Two kinds of projects — each keeps its own open song while you switch">
+      <button id="modePatterns" data-mode="patterns" title="Parts per track, arranged on the Song timeline">Patterns</button>
+      <button id="modeLines" data-mode="lines" title="Every instrument is one line — write all melodies in one place">Lines</button>
+    </div>
     <nav class="instruments">
       <div class="instruments" id="trackTabs"><!-- one tab per track, built by app.js --></div>
+      <button class="inst song-tab hidden" id="linesTab" title="All instrument lines on one timeline">✎ Lines</button>
       <div class="add-track">
         <button class="inst add" id="addTrackBtn" title="Add an instrument track">+ Add track</button>
         <div class="add-menu hidden" id="addMenu"><!-- built by app.js --></div>
@@ -25,7 +30,7 @@
     <section class="transport">
       <button id="playBtn" class="tbtn play" title="Play / Stop (Space)">▶</button>
       <button id="recBtn" class="tbtn rec" title="Arm recording (R)">● REC</button>
-      <button id="clearBtn" class="tbtn" title="Clear the open part (or the timeline in Song)">Clear</button>
+      <button id="clearBtn" class="tbtn" title="Clear the open part (the timeline in Song, the selected line in Lines)">Clear</button>
 
       <span class="position" id="position">Bar 1 · 1</span>
 
@@ -76,6 +81,9 @@
     <!-- Song timeline -->
     <div id="songView" class="hidden"><!-- built by SongView --></div>
 
+    <!-- Lines project: every instrument as one line -->
+    <div id="linesView" class="hidden"><!-- built by LinesView --></div>
+
     <!-- Mixer -->
     <div id="mixerView" class="hidden"><!-- built by MixerView --></div>
 
@@ -107,6 +115,7 @@
   <script src="js/guitar.js"></script>
   <script src="js/bass-guitar.js"></script>
   <script src="js/project.js"></script>
+  <script src="js/lines.js"></script>
   <script src="js/player.js"></script>
   <script src="js/export.js"></script>
   <script src="js/param-panel.js"></script>
@@ -115,6 +124,7 @@
   <script src="js/drum-view.js"></script>
   <script src="js/piano-roll.js"></script>
   <script src="js/song-view.js"></script>
+  <script src="js/lines-view.js"></script>
   <script src="js/mixer-view.js"></script>
   <script src="js/store.js"></script>
   <script src="js/app.js"></script>

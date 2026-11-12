@@ -49,8 +49,9 @@ function safeId() {
 
 function saveSequence(seq) {
   const all = readAll();
-  // Same name overwrites in place, so re-saving a beat updates one file.
-  const existing = all.find((s) => s.name === seq.name);
+  // Same name (and same kind: Patterns / Lines) overwrites in place, so re-saving updates one file.
+  const kind = (s) => s.kind || "patterns";
+  const existing = all.find((s) => s.name === seq.name && kind(s) === kind(seq));
   const record = Object.assign({}, seq, {
     id: existing ? existing.id : safeId(),
     savedAt: Date.now(),

@@ -12,6 +12,9 @@
  *               playhead on its lane (repeating the part if the clip is
  *               longer than it). The song loops over the loop region, or
  *               0 → song end (or a fixed `range`, for the WAV export).
+ *   "lines"   — a Lines project (no parts / clips): every line plays its own
+ *               notes from bar 1, all together, over the loop region or
+ *               bar 1 → the last note's bar (or a fixed `range`).
  *
  * Sidechain: when a track plays (a drum track: a kick), every track whose
  * fx.duckSource is that track gets its channel ducked at that moment.
@@ -30,21 +33,31 @@ SoundPad.Player = class Player {
 
   /** The song steps that play: a fixed range, the loop region, or 0 → song end. */
   _range() {
-    return this.range || SoundPad.Project.songRange(this.project);
+    if (this.range) return this.range;
+    return this.mode === "lines" ? SoundPad.Lines.range(this.project) : SoundPad.Project.songRange(this.project);
+  }
+
+  /** Playing a whole song (Song / Mixer tab, or a Lines project) rather than one part? */
+  get whole() {
+    return this.mode !== "pattern";
   }
 
   setProject(project, tracks) {
     this.project = project;
     this.tracks = tracks;
+    // A Lines project only plays as "lines"; a Patterns project never does.
+    const lines = SoundPad.Lines.isLines(project);
+    if (lines && this.mode !== "lines") { this.mode = "lines"; this.trackId = null; }
+    else if (!lines && this.mode === "lines") this.mode = "song";
     this.sync();
   }
 
   /**
-   * Switch what plays: setMode("song") or setMode("pattern", trackId).
+   * Switch what plays: setMode("song"), setMode("lines") or setMode("pattern", trackId).
    * A real change while playing starts the new loop from its beginning.
    */
   setMode(mode, trackId = null) {
-    const next = mode === "song" ? "song" : "pattern";
+    const next = mode === "song" || mode === "lines" ? mode : "pattern";
     const id = next === "pattern" ? trackId : null;
     const changed = next !== this.mode || id !== this.trackId;
     this.mode = next;
@@ -66,7 +79,7 @@ SoundPad.Player = class Player {
     const p = this.project;
     const P = SoundPad.Project;
     if (!p) return P.BAR;
-    if (this.mode === "song") {
+    if (this.whole) {
       const r = this._range();
       return r.end - r.start;
     }
@@ -97,9 +110,9 @@ SoundPad.Player = class Player {
       step %= len;
     }
 
-    const song = this.mode === "song";
-    const range = song ? this._range() : null;
-    const songStep = song ? range.start + step : -1;
+    const song = this.mode === "song", lines = this.mode === "lines";
+    const range = this.whole ? this._range() : null;
+    const songStep = this.whole ? range.start + step : -1;
     const sps = this.engine.secondsPerStep();
     const anySolo = p.tracks.some((t) => t.solo);
     const locals = {};
@@ -109,20 +122,31 @@ SoundPad.Player = class Player {
     for (const { track, instrument } of this.tracks) {
       // room = steps until this part stops sounding here (notes are cut there,
       // so a long note can't ring over the next clip or past the loop's wrap).
-      let part = null, local = -1, room = len - step;
-      if (song) {
-        const clip = P.clipAt(p, track.id, songStep);
-        if (clip && !track.mute && !(anySolo && !track.solo)) {
-          part = P.part(p, clip.partId);
-          local = (songStep - clip.start) % P.partLength(part);
-          room = Math.min(P.clipStopAt(p, clip, songStep), range.end) - songStep;
+      // `src` = what holds the notes: a part, or (Lines) the line itself.
+      let src = null, local = -1, room = len - step;
+      if (lines) {
+        locals[track.id] = songStep;
+        if (!track.mute && !(anySolo && !track.solo)) {
+          src = track;
+          local = songStep;
+          room = range.end - songStep;
         }
-      } else if (track.id === this.trackId) {
-        part = P.currentPart(p, track);
-        if (part) local = step;            // the loop IS the part
+      } else {
+        if (song) {
+          const clip = P.clipAt(p, track.id, songStep);
+          if (clip && !track.mute && !(anySolo && !track.solo)) {
+            src = P.part(p, clip.partId);
+            local = (songStep - clip.start) % P.partLength(src);
+            room = Math.min(P.clipStopAt(p, clip, songStep), range.end) - songStep;
+          }
+        } else if (track.id === this.trackId) {
+          src = P.currentPart(p, track);
+          if (src) local = step;             // the loop IS the part
+        }
+        locals[track.id] = src && src.id === track.currentPartId ? local : -1;
       }
-      locals[track.id] = part && part.id === track.currentPartId ? local : -1;
-      if (!part) continue;
+      if (!src) continue;
+      const part = src;
 
       // Gate slightly short of the full length so repeated notes re-articulate.
       const gate = (n) => Math.min(n.len, room) * sps - sps * 0.05;
@@ -144,7 +168,8 @@ SoundPad.Player = class Player {
       } catch (err) {
         // One track's bad note must not silence the others (or stop the clock).
         const n = starts[0];
-        this.engine._report("error", `${track.name} › ${part.name}: ${err.message || err} (note ${n.key} at step ${n.step}, len ${n.len}, vel ${n.vel})`,
+        const where = lines ? track.name : `${track.name} › ${part.name}`;
+        this.engine._report("error", `${where}: ${err.message || err} (note ${n.key} at step ${n.step}, len ${n.len}, vel ${n.vel})`,
           `error:${track.id}:${err.message}`);
       }
     }
@@ -156,6 +181,7 @@ SoundPad.Player = class Player {
    * open part (for recording), or -1 if that part isn't the one looping.
    */
   localStep(track, step) {
+    if (this.mode === "lines") return this._range().start + step;    // a line runs from bar 1
     if (this.mode !== "pattern" || track.id !== this.trackId) return -1;
     const part = SoundPad.Project.currentPart(this.project, track);
     return part ? step % SoundPad.Project.partLength(part) : -1;

@@ -1,0 +1,449 @@
+{
+  "kind": "lines",
+  "version": 1,
+  "name": "First attempt",
+  "bpm": 120,
+  "mix": {
+    "master": 1,
+    "reverbReturn": 0.8,
+    "reverbSize": 2.2,
+    "delayReturn": 0.7,
+    "delayTime": "1/8d",
+    "delayFeedback": 0.35
+  },
+  "loop": null,
+  "lines": [
+    {
+      "id": "ln_mwdbio0bfxyyz",
+      "name": "Drums",
+      "type": "drums",
+      "preset": "hard",
+      "params": {},
+      "volume": 1,
+      "pan": 0,
+      "mute": false,
+      "solo": false,
+      "fx": {
+        "lowCut": 20,
+        "eqLow": 0,
+        "eqMid": 0,
+        "eqMidFreq": 1000,
+        "eqHigh": 0,
+        "comp": 0,
+        "chorus": 0,
+        "reverb": 0,
+        "delay": 0,
+        "duckSource": "",
+        "duck": 0.6,
+        "duckRelease": 180
+      },
+      "size": "m",
+      "notes": [
+        {
+          "step": 0,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 2,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 4,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 6,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 8,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 10,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 12,
+          "len": 1,
+          "key": "hat",
+          "vel": 0.8
+        },
+        {
+          "step": 14,
+          "len": 1,
+          "key": "ltom",
+          "vel": 0.8
+        },
+        {
+          "step": 15,
+          "len": 1,
+          "key": "hat",
+          "vel": 0.8
+        },
+        {
+          "step": 16,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 17,
+          "len": 1,
+          "key": "rim",
+          "vel": 0.8
+        },
+        {
+          "step": 18,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 20,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 22,
+          "len": 1,
+          "key": "rim",
+          "vel": 0.8
+        },
+        {
+          "step": 21,
+          "len": 1,
+          "key": "rim",
+          "vel": 0.8
+        },
+        {
+          "step": 23,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 25,
+          "len": 1,
+          "key": "rim",
+          "vel": 0.8
+        },
+        {
+          "step": 26,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 28,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 29,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 30,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 31,
+          "len": 1,
+          "key": "rim",
+          "vel": 0.8
+        },
+        {
+          "step": 19,
+          "len": 1,
+          "key": "ltom",
+          "vel": 0.8
+        },
+        {
+          "step": 24,
+          "len": 1,
+          "key": "kick",
+          "vel": 0.8
+        },
+        {
+          "step": 28,
+          "len": 1,
+          "key": "kick",
+          "vel": 0.8
+        },
+        {
+          "step": 30,
+          "len": 1,
+          "key": "kick",
+          "vel": 0.8
+        },
+        {
+          "step": 22,
+          "len": 1,
+          "key": "snare",
+          "vel": 0.8
+        },
+        {
+          "step": 32,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 33,
+          "len": 1,
+          "key": "rim",
+          "vel": 0.8
+        },
+        {
+          "step": 34,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 35,
+          "len": 1,
+          "key": "ltom",
+          "vel": 0.8
+        },
+        {
+          "step": 36,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 37,
+          "len": 1,
+          "key": "rim",
+          "vel": 0.8
+        },
+        {
+          "step": 38,
+          "len": 1,
+          "key": "rim",
+          "vel": 0.8
+        },
+        {
+          "step": 38,
+          "len": 1,
+          "key": "snare",
+          "vel": 0.8
+        },
+        {
+          "step": 40,
+          "len": 1,
+          "key": "kick",
+          "vel": 0.8
+        },
+        {
+          "step": 39,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 41,
+          "len": 1,
+          "key": "rim",
+          "vel": 0.8
+        },
+        {
+          "step": 42,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 44,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 45,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 44,
+          "len": 1,
+          "key": "kick",
+          "vel": 0.8
+        },
+        {
+          "step": 46,
+          "len": 1,
+          "key": "kick",
+          "vel": 0.8
+        },
+        {
+          "step": 46,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 47,
+          "len": 1,
+          "key": "rim",
+          "vel": 0.8
+        },
+        {
+          "step": 48,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 50,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 52,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 54,
+          "len": 1,
+          "key": "open",
+          "vel": 0.8
+        },
+        {
+          "step": 56,
+          "len": 1,
+          "key": "kick",
+          "vel": 0.8
+        },
+        {
+          "step": 58,
+          "len": 1,
+          "key": "hat",
+          "vel": 0.8
+        },
+        {
+          "step": 59,
+          "len": 1,
+          "key": "ltom",
+          "vel": 0.8
+        },
+        {
+          "step": 59,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 60,
+          "len": 1,
+          "key": "mtom",
+          "vel": 0.8
+        },
+        {
+          "step": 61,
+          "len": 1,
+          "key": "ltom",
+          "vel": 0.8
+        },
+        {
+          "step": 62,
+          "len": 1,
+          "key": "htom",
+          "vel": 0.8
+        },
+        {
+          "step": 63,
+          "len": 1,
+          "key": "ltom",
+          "vel": 0.8
+        },
+        {
+          "step": 62,
+          "len": 1,
+          "key": "snare",
+          "vel": 0.8
+        }
+      ]
+    },
+    {
+      "id": "ln_mwdbio0bpsk3s",
+      "name": "Bass",
+      "type": "bass-guitar",
+      "preset": "metal-bass",
+      "params": {},
+      "volume": 1,
+      "pan": 0,
+      "mute": false,
+      "solo": false,
+      "fx": {
+        "lowCut": 20,
+        "eqLow": 0,
+        "eqMid": 0,
+        "eqMidFreq": 1000,
+        "eqHigh": 0,
+        "comp": 0,
+        "chorus": 0,
+        "reverb": 0,
+        "delay": 0,
+        "duckSource": "",
+        "duck": 0.6,
+        "duckRelease": 180
+      },
+      "size": "m",
+      "notes": []
+    },
+    {
+      "id": "ln_mwdbio0ba9f3x",
+      "name": "Guitar",
+      "type": "guitar",
+      "preset": "clean",
+      "params": {},
+      "volume": 1,
+      "pan": 0,
+      "mute": false,
+      "solo": false,
+      "fx": {
+        "lowCut": 20,
+        "eqLow": 0,
+        "eqMid": 0,
+        "eqMidFreq": 1000,
+        "eqHigh": 0,
+        "comp": 0,
+        "chorus": 0,
+        "reverb": 0,
+        "delay": 0,
+        "duckSource": "",
+        "duck": 0.6,
+        "duckRelease": 180
+      },
+      "size": "m",
+      "notes": []
+    }
+  ],
+  "id": "seq_mwdbxe052iz",
+  "savedAt": 1794474738725
+}

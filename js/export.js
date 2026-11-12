@@ -4,6 +4,7 @@
  * offline, faster than real time, through exactly the same parts as live
  * playback: Player → instruments → Channels (EQ, comp, chorus, sidechain,
  * sends) → Reverb / Delay buses → master fader → limiter.
+ * A Lines project renders every line from bar 1 to its last note's bar.
  * Mute / solo are respected (you export what you hear). The transport's
  * Volume slider is a monitor knob and is NOT part of the export.
  *
@@ -18,9 +19,11 @@ SoundPad.Export = {
 
   /** Render the song → { buffer: AudioBuffer, songEnd: seconds where the last bar ends }. */
   async render(project, sampleRate = this.SAMPLE_RATE) {
-    const P = SoundPad.Project;
-    if (!P.songEnd(project)) throw new Error("The song is empty — place some parts on the timeline first.");
-    const end = P._ceilBar(P.songEnd(project));
+    const P = SoundPad.Project, L = SoundPad.Lines;
+    const lines = L.isLines(project);   // a Lines project: every line from bar 1
+    const last = lines ? L.end(project) : P.songEnd(project);
+    if (!last) throw new Error(lines ? "Nothing to export — write some notes first." : "The song is empty — place some parts on the timeline first.");
+    const end = P._ceilBar(last);
 
     const engine = new SoundPad.Engine();
     engine.setBpm(project.bpm);
@@ -38,7 +41,7 @@ SoundPad.Export = {
     const player = new SoundPad.Player(engine);
     player.range = { start: 0, end };
     player.setProject(project, tracks);
-    player.setMode("song");
+    player.setMode(lines ? "lines" : "song");
     for (let s = 0; s < end; s++) player.onStep(s, this.LEAD_IN + s * sps);
 
     const buffer = await ctx.startRendering();

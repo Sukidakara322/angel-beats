@@ -11,23 +11,38 @@
  *   • the shared transport (play / record / tempo / volume / position)
  *   • parts bar, save / load, keyboard routing, playhead drawing
  * The Player decides what to play on each step; views only edit data.
+ *
+ * Two kinds of projects, picked with the Patterns | Lines switch:
+ *   Patterns — tracks with parts, arranged on the Song timeline (above)
+ *   Lines    — every instrument is one line of notes on one timeline
+ *              (SoundPad.Lines + LinesView): tabs Lines + Mixer, saved as
+ *              its own kind of record
+ * Each mode keeps its open project in memory, so switching loses nothing.
  * ------------------------------------------------------------------ */
 (function () {
   const P = SoundPad.Project;
+  const L = SoundPad.Lines;
   const engine = new SoundPad.Engine();
   const player = new SoundPad.Player(engine);
   engine.onStep = (step, time) => player.onStep(step, time);
 
   const SONG = "song";        // id of the Song tab (track tabs use track ids)
   const MIXER = "mixer";      // id of the Mixer tab
+  const LINES = "lines";      // id of the Lines tab (Lines projects)
 
   let project = null;
-  let rts = [];               // per-track runtime: { track, channel, instrument, view, root, tab }
+  let rts = [];               // per-track runtime: { track, channel, instrument, view, root, tab } (Lines: no view/root/tab)
   let songView = null;
   let mixerView = null;
-  let active = null;          // track id, SONG or MIXER
+  let linesView = null;
+  let active = null;          // track id, SONG, MIXER or LINES
   let recordArmed = false;
   let currentSeqId = null;
+  let mode = "patterns";      // "patterns" | "lines" — the kind of the open project
+  // The project each mode had open when you switched away: { project, seqId, active, name }.
+  const parked = { patterns: null, lines: null };
+
+  const isLines = () => mode === "lines";
 
   // DOM refs
   const $ = (id) => document.getElementById(id);
@@ -66,34 +81,47 @@
   const audioWarn = $("audioWarn");
   const audioWarnText = $("audioWarnText");
   const audioRestart = $("audioRestart");
+  const linesTab = $("linesTab");
+  const linesRoot = $("linesView");
+  const modeBtns = [$("modePatterns"), $("modeLines")];
 
   const IDLE_HINT = "▶ / Space plays the open tab: a track's part, or the whole song";
+  const LINES_HINT = "▶ / Space plays every line together · the keyboard plays the selected line";
 
   const rtOf = (trackId) => rts.find((rt) => rt.track.id === trackId);
   const activeRt = () => rtOf(active);
 
   // --- Mounting a project -------------------------------------------
 
-  /** Tear down the old project's tracks and build the new one's. */
-  function mountProject(next) {
+  /**
+   * Tear down the old project's tracks and build the new one's (either kind).
+   * `want` = the tab to open (default: keep the one that was open).
+   */
+  function mountProject(next, want) {
     // Remember what was open so a rebuild/load keeps that tab.
-    const prevActive = active;
-    const prevType = activeRt()?.track.type;
+    const prevActive = want ?? active;
+    const prevType = rtOf(prevActive)?.track.type;
 
     rts.forEach((rt) => {
-      rt.view.destroy();
-      rt.root.remove();
-      rt.tab.remove();
+      if (rt.view) rt.view.destroy();
+      if (rt.root) rt.root.remove();
+      if (rt.tab) rt.tab.remove();
       rt.channel.dispose();
     });
     if (songView) songView.destroy();
     if (mixerView) mixerView.destroy();
+    if (linesView) linesView.destroy();
+    songView = linesView = null;
 
     project = next;
+    mode = L.isLines(project) ? "lines" : "patterns";
     engine.setMix(project.mix);
     engine.setBpm(project.bpm);
     project.bpm = engine.bpm;
     bpmInput.value = engine.bpm;
+    applyModeChrome();
+
+    if (isLines()) return mountLines(prevActive);
 
     rts = project.tracks.map((track) => {
       const def = SoundPad.Instruments.get(track.type);
@@ -174,29 +202,97 @@
     setActive(keep.track.id);
   }
 
+  /** A Lines project: a Channel + instrument per line, the Lines view and the Mixer. */
+  function mountLines(prevActive) {
+    rts = project.tracks.map((track) => {
+      const def = SoundPad.Instruments.get(track.type);
+      const channel = new SoundPad.Channel(engine, track);
+      const instrument = def.create(engine, channel, track.preset, track.params);
+      return { track, channel, instrument };
+    });
+
+    linesView = new SoundPad.LinesView({
+      root: linesRoot,
+      project,
+      tracks: rts,
+      engine,
+      player,
+      preview: (rt) => previewSound(rt),
+      onAddLine: () => toggleAddMenu(true),
+      onDeleteLine: (id) => {
+        L.deleteLine(project, id);
+        mountProject(project);
+      },
+    });
+    linesView.build();
+
+    mixerView = new SoundPad.MixerView({ root: mixerRoot, project, tracks: rts, engine, onChange: () => {} });
+    mixerView.build();
+
+    player.setProject(project, rts);
+    clearPlayheads();
+    addTrackBtn.disabled = project.tracks.length >= L.MAX_LINES;
+    setActive(prevActive === MIXER ? MIXER : LINES);
+  }
+
+  /** Top bar for the open project's kind: track tabs + Song (Patterns), or the Lines tab (Lines). */
+  function applyModeChrome() {
+    const lines = isLines();
+    modeBtns.forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
+    tabsEl.classList.toggle("hidden", lines);
+    songTab.classList.toggle("hidden", lines);
+    linesTab.classList.toggle("hidden", !lines);
+    addTrackBtn.textContent = lines ? "+ Add line" : "+ Add track";
+    addTrackBtn.title = lines ? "Add an instrument line" : "Add an instrument track";
+  }
+
+  /**
+   * Patterns ⇄ Lines. The project you leave stays open in the background
+   * (with its name, saved-file link and tab), so coming back loses nothing.
+   */
+  function switchMode(next) {
+    if (next === mode) return;
+    showStopped();
+    toggleAddMenu(false);
+    parked[mode] = { project, seqId: currentSeqId, active, name: seqNameInput.value };
+    const back = parked[next];
+    parked[next] = null;
+    currentSeqId = back ? back.seqId : null;
+    seqNameInput.value = back ? back.name : "";
+    if (back) mountProject(back.project, back.active);
+    else mountProject(next === "lines" ? L.create() : P.create(), next === "lines" ? LINES : "");
+    renderLibrary();
+  }
+
   // --- Tabs: tracks + song ------------------------------------------
 
   /** Show a track editor (its part loops), the Song timeline or the Mixer (both play the song). */
   function setActive(id) {
     active = id;
-    const song = id === SONG, mixer = id === MIXER, whole = song || mixer;
+    const song = id === SONG, mixer = id === MIXER, lines = id === LINES, whole = song || mixer || lines;
     songTab.classList.toggle("active", song);
     mixerTab.classList.toggle("active", mixer);
-    stageEl.classList.toggle("wide", whole);     // timeline / mixer use the full window width
+    linesTab.classList.toggle("active", lines);
+    stageEl.classList.toggle("wide", whole);     // timeline / lines / mixer use the full window width
     songRoot.classList.toggle("hidden", !song);
+    linesRoot.classList.toggle("hidden", !lines);
     mixerRoot.classList.toggle("hidden", !mixer);
     partBarEl.classList.toggle("hidden", whole);
     viewsEl.classList.toggle("hidden", whole);
     clearBtn.disabled = mixer;                   // nothing to clear in the mixer
     rts.forEach((rt) => {
+      if (!rt.tab) return;
       const on = rt.track.id === id;
       rt.tab.classList.toggle("active", on);
       rt.root.classList.toggle("hidden", !on);
     });
     // What plays follows the tab: a track tab loops only its open part, Song / Mixer play the song.
-    player.setMode(whole ? "song" : "pattern", whole ? null : id);
+    // A Lines project always plays all its lines.
+    if (isLines()) player.setMode("lines");
+    else player.setMode(whole ? "song" : "pattern", whole ? null : id);
     clearPlayheads();
     if (song) songView.render();         // parts / mute / solo may have changed elsewhere
+    else if (lines) linesView.render();
     else if (mixer) mixerView.render();
     else renderPartBar();
     applyRecordArm();      // record arming follows the visible track
@@ -267,11 +363,15 @@
   }
 
   function applyRecordArm() {
-    rts.forEach((rt) => (rt.view.recordArmed = recordArmed && rt.track.id === active));
+    rts.forEach((rt) => { if (rt.view) rt.view.recordArmed = recordArmed && rt.track.id === active; });
+    if (linesView) linesView.recordArmed = recordArmed && active === LINES;
     const rt = activeRt();
-    if (!recordArmed) statusHint.textContent = IDLE_HINT;
+    if (!recordArmed) statusHint.textContent = isLines() ? LINES_HINT : IDLE_HINT;
     else if (rt) statusHint.textContent = `Recording ${rt.track.name} — play the pads/keys while it loops`;
-    else statusHint.textContent = "Recording works in a track tab — open a track to record";
+    else if (active === LINES) statusHint.textContent = "Recording into the selected line — play its keys while the song plays";
+    else statusHint.textContent = isLines()
+      ? "Recording works in the Lines tab — open it to record"
+      : "Recording works in a track tab — open a track to record";
   }
 
   function toggleRecord() {
@@ -282,6 +382,7 @@
 
   function clearActive() {
     if (active === MIXER) return;
+    if (active === LINES) { linesView.clearSelected(); return; }
     if (active === SONG) {
       if (!confirm("Remove every clip from the song timeline? (The parts themselves are kept.)")) return;
       P.clearTimeline(project);
@@ -321,6 +422,14 @@
 
   function addTrack({ type, preset, name }) {
     toggleAddMenu(false);
+    if (isLines()) {
+      if (project.tracks.length >= L.MAX_LINES) return;
+      const line = L.addLine(project, type, type === "drums" ? "Drums" : name, preset);
+      SoundPad.LinesView.prefs.selected = line.id;      // the new line opens selected
+      mountProject(project, LINES);
+      previewSound(rtOf(line.id));
+      return;
+    }
     if (project.tracks.length >= P.MAX_TRACKS) return;
     const trackName = type === "drums" ? "Drums" : name;
     const track = P.addTrack(project, type, trackName, preset);
@@ -365,6 +474,7 @@
 
   function renameTrack(trackId) {
     const rt = rtOf(trackId);
+    if (!rt || !rt.view) return;
     const name = prompt("Rename track", rt.track.name);
     if (name === null) return;
     P.renameTrack(project, trackId, name);
@@ -395,7 +505,7 @@
   /** Track bar (sound, rename, delete) + chips for the active track's parts. */
   function renderPartBar() {
     const rt = activeRt();
-    if (!rt) return;
+    if (!rt || !rt.view) return;
     const track = rt.track;
     const parts = P.partsOf(project, track.id);
 
@@ -474,7 +584,8 @@
 
   async function saveCurrent() {
     project.name = (seqNameInput.value || "").trim() || "Untitled song";
-    const record = await SoundPad.Store.save(project);
+    // A Lines project is saved as its own kind of record: one entry per line.
+    const record = await SoundPad.Store.save(isLines() ? L.toRecord(project) : project);
     currentSeqId = record.id;
     seqNameInput.value = record.name;
     renderLibrary();
@@ -482,8 +593,10 @@
 
   /** Render the whole song offline and download it as a .wav (mix, effects and master included). */
   async function exportWav() {
-    if (!P.songEnd(project)) {
-      statusHint.textContent = "Nothing to export yet — place parts on the Song timeline first";
+    if (isLines() ? !L.end(project) : !P.songEnd(project)) {
+      statusHint.textContent = isLines()
+        ? "Nothing to export yet — write some notes in the lines first"
+        : "Nothing to export yet — place parts on the Song timeline first";
       return;
     }
     const name = ((seqNameInput.value || project.name || "").trim() || "Sound Pad song").replace(/[\\/:*?"<>|]+/g, "_");
@@ -508,7 +621,14 @@
   async function loadSequence(id) {
     const rec = await SoundPad.Store.get(id);
     if (!rec) return;
-    mountProject(P.fromRecord(rec));
+    // Loading the other kind switches mode; the project you had open there stays parked.
+    const kind = L.isLines(rec) ? "lines" : "patterns";
+    if (kind !== mode) {
+      showStopped();
+      parked[mode] = { project, seqId: currentSeqId, active, name: seqNameInput.value };
+      parked[kind] = null;
+    }
+    mountProject(kind === "lines" ? L.fromRecord(rec) : P.fromRecord(rec), kind !== mode ? (kind === "lines" ? LINES : "") : undefined);
     currentSeqId = rec.id;
     seqNameInput.value = project.name;
     renderLibrary();
@@ -517,6 +637,7 @@
   async function deleteSequence(id) {
     await SoundPad.Store.remove(id);
     if (currentSeqId === id) currentSeqId = null;
+    Object.values(parked).forEach((w) => { if (w && w.seqId === id) w.seqId = null; });
     renderLibrary();
   }
 
@@ -540,11 +661,23 @@
       name.className = "name";
       name.textContent = rec.name;
 
+      const lines = L.isLines(rec);
+      const kind = document.createElement("span");
+      kind.className = "kind " + (lines ? "lines" : "patterns");
+      kind.textContent = lines ? "Lines" : "Patterns";
+      kind.title = lines ? "Every instrument as one line" : "Parts arranged on the Song timeline";
+
       const meta = document.createElement("span");
       meta.className = "meta";
-      const tracks = Array.isArray(rec.tracks) ? rec.tracks.length : 0;
-      const parts = Array.isArray(rec.parts) ? rec.parts.length : 0;
-      meta.textContent = `${rec.bpm} BPM · ${tracks} tracks · ${parts} parts`;
+      if (lines) {
+        const ls = Array.isArray(rec.lines) ? rec.lines : [];
+        const notes = ls.reduce((a, l) => a + (Array.isArray(l.notes) ? l.notes.length : 0), 0);
+        meta.textContent = `${rec.bpm} BPM · ${ls.length} lines · ${notes} notes`;
+      } else {
+        const tracks = Array.isArray(rec.tracks) ? rec.tracks.length : 0;
+        const parts = Array.isArray(rec.parts) ? rec.parts.length : 0;
+        meta.textContent = `${rec.bpm} BPM · ${tracks} tracks · ${parts} parts`;
+      }
 
       const spacer = document.createElement("span");
       spacer.className = "spacer";
@@ -559,7 +692,7 @@
       delBtn.textContent = "Delete";
       delBtn.addEventListener("click", () => deleteSequence(rec.id));
 
-      li.append(name, meta, spacer, loadBtn, delBtn);
+      li.append(kind, name, meta, spacer, loadBtn, delBtn);
       libListEl.appendChild(li);
     });
   }
@@ -568,20 +701,22 @@
 
   /** "Song · Bar 5 · 2" or "Drums 1 · Bar 2 · 3" (the looping part) from the player's info (null = stopped). */
   function showPosition(info) {
-    const song = player.mode === "song";
+    const song = player.whole;
     let step;
     if (info) step = info.songStep >= 0 ? info.songStep : info.step;
-    else step = song ? P.songRange(project).start : 0;
+    else if (!song) step = 0;
+    else step = (isLines() ? L.range(project) : P.songRange(project)).start;
     const bar = Math.floor(step / P.BAR) + 1;
     const beat = Math.floor((step % P.BAR) / 4) + 1;
-    const what = song ? "Song" : player.patternPart()?.name || "Part";
+    const what = isLines() ? "Lines" : song ? "Song" : player.patternPart()?.name || "Part";
     posEl.textContent = `${what} · Bar ${bar} · ${beat}`;
-    posEl.title = song ? "Playing the whole song" : `Playing only "${what}" (this track's open part)`;
+    posEl.title = isLines() ? "Playing every line together" : song ? "Playing the whole song" : `Playing only "${what}" (this track's open part)`;
   }
 
   function clearPlayheads() {
-    rts.forEach((rt) => rt.view.clearPlayhead());
+    rts.forEach((rt) => { if (rt.view) rt.view.clearPlayhead(); });
     if (songView) songView.clearPlayhead();
+    if (linesView) linesView.clearPlayhead();
     showPosition(null);
   }
 
@@ -594,8 +729,9 @@
     if (!item || !item.info) return;
     const { songStep, locals } = item.info;
     // Each editor lights up its own position (or nothing if its part isn't playing).
-    rts.forEach((rt) => rt.view.highlightColumn(locals[rt.track.id] ?? -1));
-    songView.setPlayhead(songStep);
+    rts.forEach((rt) => { if (rt.view) rt.view.highlightColumn(locals[rt.track.id] ?? -1); });
+    if (songView) songView.setPlayhead(songStep);
+    if (linesView) linesView.setPlayhead(songStep);
     showPosition(item.info);
   }
 
@@ -606,6 +742,8 @@
   clearBtn.addEventListener("click", clearActive);
   songTab.addEventListener("click", () => setActive(SONG));
   mixerTab.addEventListener("click", () => setActive(MIXER));
+  linesTab.addEventListener("click", () => setActive(LINES));
+  modeBtns.forEach((b) => b.addEventListener("click", () => switchMode(b.dataset.mode)));
   exportBtn.addEventListener("click", exportWav);
 
   bpmInput.addEventListener("change", () => {
@@ -623,6 +761,7 @@
     const k = e.key.toLowerCase();
     if (k === " ") { e.preventDefault(); togglePlay(); return; }
     if (k === "r") { toggleRecord(); return; }
+    if (active === LINES) { if (linesView.handleKey(k)) e.preventDefault(); return; }
     const rt = activeRt();
     if (rt && rt.view.handleKey(k)) e.preventDefault();
   });
@@ -633,6 +772,9 @@
   SoundPad.app = {
     get project() { return project; },
     get songView() { return songView; },
+    get linesView() { return linesView; },
+    get mode() { return mode; },
+    switchMode,
     get mixerView() { return mixerView; },
     get tracks() { return rts; },
     player,

@@ -81,7 +81,8 @@ SoundPad.Store = {
       id: "seq_" + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36),
       savedAt: Date.now(),
     });
-    const idx = list.findIndex((s) => s.name === seq.name);
+    const kind = (s) => s.kind || "patterns";      // a Lines save never overwrites a Patterns one
+    const idx = list.findIndex((s) => s.name === seq.name && kind(s) === kind(seq));
     if (idx !== -1) {
       record.id = list[idx].id;
       list[idx] = record;
